@@ -51,9 +51,12 @@ class TrainingStrategy(ABC):
         reduce_in_full_precision: bool = False,
         mixed_precision_dtype: torch.dtype = torch.bfloat16,
         worker_init_fn: Optional[Callable[[int], None]] = None,
+        using_lora: bool = False,
         **_: str,
     ) -> None:
         self.vlm, self.device_id, self.stage = vlm, device_id, stage
+
+        self.using_lora = using_lora
 
         # Get relevant VLM instance parameters before they get (potentially) wrapped
         self.all_module_keys, self.trainable_module_keys = self.vlm.all_module_keys, self.vlm.trainable_module_keys
@@ -235,10 +238,10 @@ class TrainingStrategy(ABC):
                         progress.update()
                         progress.set_description(status)
 
-            # Save checkpoint at end each epoch (if `self.max_steps` is None)
-            if self.max_steps is None:
-                self.save_checkpoint(metrics.run_dir, metrics.global_step, epoch, loss.item())
-                dist.barrier()
+                # Save checkpoint at end each epoch (if `self.max_steps` is None)
+                if self.max_steps is None:
+                    self.save_checkpoint(metrics.run_dir, metrics.global_step, epoch, loss.item())
+                    dist.barrier()
 
     # === VLA Training ===
 

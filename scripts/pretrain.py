@@ -67,7 +67,7 @@ class PretrainConfig:
 
     # Run Arguments
     run_id: Optional[str] = None                                    # Run ID for logging, Weights & Biases
-    run_root_dir: Path = Path("/mnt/fsx/x-prismatic-vlms/runs")     # Path to directory to store logs & checkpoints
+    run_root_dir: Path = Path("checkpoints/robot_learning/x-prismatic-vlms/runs")     # Path to directory to store logs & checkpoints
     seed: int = 7                                                   # Random seed (for reproducibility)
 
     # HF Hub Credentials (for any gated models)
@@ -77,6 +77,7 @@ class PretrainConfig:
     trackers: Tuple[str, ...] = ("jsonl", "wandb")                  # Trackers to initialize (if W&B, add config!)
     wandb_project: str = "onyx-vlms"                                # Name of W&B project (default: `prismatic`)
     wandb_entity: Optional[str] = "stanford-voltron"                # Name of W&B entity (default: None)
+    using_lora:Optional[bool] = False                               # Only really applies to FSDP-based training at the moment. Determines whether LoRA (PEFT) is used.
 
     def __post_init__(self) -> None:
         """Set optimization parameters based on `stage` in {"align", "finetune"}."""
@@ -204,6 +205,7 @@ def pretrain(cfg: PretrainConfig) -> None:
         enable_mixed_precision_training=cfg.model.enable_mixed_precision_training,
         reduce_in_full_precision=cfg.model.reduce_in_full_precision,
         worker_init_fn=worker_init_fn,
+        using_lora=cfg.using_lora,
     )
     train_strategy.run_setup(run_dir=run_dir, n_train_examples=len(train_dataset))
 

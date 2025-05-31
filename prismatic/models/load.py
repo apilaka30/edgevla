@@ -12,8 +12,10 @@ from typing import List, Optional, Union
 
 from huggingface_hub import HfFileSystem, hf_hub_download
 
+from peft import PeftModel
+
 from prismatic.conf import ModelConfig
-from prismatic.models.materialize import get_llm_backbone_and_tokenizer, get_vision_backbone_and_transform
+from prismatic.models.materialize import get_llm_backbone_and_tokenizer, get_vision_backbone_and_transform, get_vlm
 from prismatic.models.registry import GLOBAL_REGISTRY, MODEL_REGISTRY
 from prismatic.models.vlas import OpenVLA
 from prismatic.models.vlms import PrismaticVLM
@@ -57,10 +59,12 @@ def load(
 ) -> PrismaticVLM:
     """Loads a pretrained PrismaticVLM from either local disk or the HuggingFace Hub."""
     if os.path.isdir(model_id_or_path):
+        # checkpoints/robot_learning/x-prismatic-vlms/runs/tinyVLM+stage-finetune+x7
         overwatch.info(f"Loading from local path `{(run_dir := Path(model_id_or_path))}`")
 
         # Get paths for `config.json` and pretrained checkpoint
-        config_json, checkpoint_pt = run_dir / "config.json", run_dir / "checkpoints" / "latest-checkpoint.pt"
+        # config_json, checkpoint_pt = run_dir / "config.json", run_dir / "checkpoints" / "latest-checkpoint.pt"
+        config_json, checkpoint_pt = run_dir / "config.json", run_dir / "lora_checkpoints"
         assert config_json.exists(), f"Missing `config.json` for `{run_dir = }`"
         assert checkpoint_pt.exists(), f"Missing checkpoint for `{run_dir = }`"
     else:
@@ -106,14 +110,29 @@ def load(
 
     # Load VLM using `from_pretrained` (clobbers HF syntax... eventually should reconcile)
     overwatch.info(f"Loading VLM [bold blue]{model_cfg['model_id']}[/] from Checkpoint")
-    vlm = PrismaticVLM.from_pretrained(
-        checkpoint_pt,
+
+    # Not loading from pretrained in this way because we have to combine lora params with the vlm params
+    # vlm = PrismaticVLM.from_pretrained(
+    #     checkpoint_pt,
+    #     model_cfg["model_id"],
+    #     vision_backbone,
+    #     llm_backbone,
+    #     arch_specifier=model_cfg["arch_specifier"],
+    #     freeze_weights=not load_for_training,
+    # )
+
+    # pulls original pretrained llm and vision backbones from HF
+    vlm = get_vlm(
         model_cfg["model_id"],
+        model_cfg["arch_specifier"],
         vision_backbone,
         llm_backbone,
-        arch_specifier=model_cfg["arch_specifier"],
-        freeze_weights=not load_for_training,
+        enable_mixed_precision_training=model_cfg["enable_mixed_precision_training"],
     )
+
+    # Update the model with the lora params
+    vlm = PeftModel.from_pretrained(vlm, checkpoint_pt)
+    vlm = vlm.merge_and_unload()
 
     return vlm
 

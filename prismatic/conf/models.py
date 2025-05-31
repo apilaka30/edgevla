@@ -135,7 +135,6 @@ class Exp_13B_One_Stage(LLaVa_v15_Reproduction_13B):
     model_id: str = "one-stage+13b"
     arch_specifier: str = "no-align+gelu-mlp"
 
-
 # Section 4.1B :: 🛠️ --> Full Finetuning through Visual Backbones
 #   =>> Note :: Run with `--stage full-finetune`
 @dataclass
@@ -234,7 +233,6 @@ class Exp_7B_DINOSigLIP_ViT_L_p14_384px_Letterbox(Exp_7B_One_Stage):
     image_resize_strategy: str = "letterbox"
     arch_specifier: str = "no-align+fused-gelu-mlp"
 
-
 @dataclass
 class Exp_7B_DINOSigLIP_ViT_L_p14_384px_Resize_Naive(Exp_7B_One_Stage):
     model_id: str = "dinosiglip-384px-resize-naive+7b"
@@ -270,6 +268,42 @@ class Ext_Exp_7B_Llama2_Chat(Exp_7B_One_Stage):
 class Ext_Exp_13B_Llama2_Chat(Exp_13B_One_Stage):
     model_id: str = "llama2-chat+13b"
     llm_backbone_id: str = "llama2-13b-chat"
+
+# @dataclass
+# class Ext_Exp_1B_Llama2_Chat(Exp_7B_One_Stage):
+#     model_id: str = "llama2-chat+1b"
+#     llm_backbone_id: str = "llama2-1b-chat"
+#     vision_backbone_id: str = "dinosiglip-vit-so-224px"
+
+#     finetune_learning_rate: float = 3e-5
+#     align_epochs: int = 2  # Increase alignment training
+#     finetune_epochs: int = 2  # More fine-tuning epochs
+#     finetune_max_steps: Optional[int] = 11000
+
+#     align_per_device_batch_size: int = 10
+    
+#     align_global_batch_size: int = align_per_device_batch_size * 4  # 2 GPUs and 2 gradient_accumulation_steps
+
+#     finetune_per_device_batch_size: int = 10
+#     finetune_global_batch_size: int = finetune_per_device_batch_size * 4
+
+@dataclass
+class Ext_Exp_1B_Llama2_Chat(Exp_7B_One_Stage):
+    model_id: str = "checkpoints/robot_learning/x-prismatic-vlms/runs/tinyVLM+stage-finetune+x7"
+    llm_backbone_id: str = "llama2-1b-chat"
+    vision_backbone_id: str = "dinosiglip-vit-so-224px"
+
+    finetune_learning_rate: float = 3e-5
+    align_epochs: int = 2  # Increase alignment training
+    finetune_epochs: int = 2  # More fine-tuning epochs
+    finetune_max_steps: Optional[int] = 11000
+
+    align_per_device_batch_size: int = 10
+    
+    align_global_batch_size: int = align_per_device_batch_size * 4  # 2 GPUs and 2 gradient_accumulation_steps
+
+    finetune_per_device_batch_size: int = 10
+    finetune_global_batch_size: int = finetune_per_device_batch_size * 4
 
 
 @dataclass
@@ -496,6 +530,15 @@ class Prism_7B_DINOSigLIP_224px(Exp_7B_One_Stage):
     arch_specifier: str = "no-align+fused-gelu-mlp"
     finetune_epochs: int = 2
 
+@dataclass
+class Aask_1B_DINOSigLIP_224px(Exp_7B_One_Stage):
+    model_id: str = "aa-dinosiglip-224px+1b"
+    vision_backbone_id: str = "dinosiglip-vit-so-224px"
+    image_resize_strategy: str = "resize-naive"
+    llm_backbone_id: str = "llama2-1b-chat"
+    arch_specifier: str = "no-align+fused-gelu-mlp"
+    finetune_epochs: int = 2
+    # add more hyperparams if needed
 
 # === Define a Model Registry Enum for Reference & Validation ===
 @unique
@@ -535,6 +578,7 @@ class ModelRegistry(Enum):
     # ~ Additional LLM Backbone Experiments :: LLaMa-2 Chat, Mistral v0.1, Mistral v0.1 Instruct ~
     EXT_EXP_LLAMA2_CHAT_7B = Ext_Exp_7B_Llama2_Chat
     EXT_EXP_LLAMA2_CHAT_13B = Ext_Exp_13B_Llama2_Chat
+    EXT_EXP_LLAMA2_CHAT_1B = Ext_Exp_1B_Llama2_Chat
     EXT_EXP_MISTRAL_V1_7B = Ext_Exp_7B_Mistral_V1
     EXT_EXP_MISTRAL_INSTRUCT_V1_7B = Ext_Exp_7B_Mistral_Instruct_V1
     EXT_EXP_PHI_2_3B = Ext_Exp_3B_Phi_2
@@ -573,6 +617,7 @@ class ModelRegistry(Enum):
     OPT_DINOSIGLIP_224PX_RESIZE_NAIVE = Opt_7B_DINOSigLIP_ViT_SO_p14_224px_Resize_Naive
     PRISM_DINOSIGLIP_224PX_CONTROLLED_7B = Prism_7B_DINOSigLIP_224px_Controlled
     PRISM_DINOSIGLIP_224PX_7B = Prism_7B_DINOSigLIP_224px
+    AASK_DINOSigLIP_224px_1B = Aask_1B_DINOSigLIP_224px
 
     @property
     def model_id(self) -> str:

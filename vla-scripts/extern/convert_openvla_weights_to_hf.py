@@ -39,10 +39,10 @@ from prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, Pr
 class HFConvertConfig:
     # fmt: off
     openvla_model_path_or_id: Union[str, Path] = (                      # Path to Pretrained VLA (on disk or HF Hub)
-        "runs/prism-dinosiglip-224px+mx-oxe-magic-soup-plus+n8+b32+x7"
+        "/home/amey/robot_learning/openvla/runs/tinyllama-dinosiglip-224px+mx-tinyllama_mix+n0+b50+x7"
     )
     output_hf_model_local_path: Path = Path(                            # Path to Local Path to save HF model
-        "hf-convert/openvla-7b"
+        "/home/amey/robot_learning/openvla/runs/tinyllama-dinosiglip-224px+mx-tinyllama_mix+n0+b50+x7/hf_checkpoints"
     )
     output_hf_model_hub_path: str = "openvla/openvla-7b"                # (Optional) Path to HF Hub Path to push
                                                                         # model to
@@ -155,8 +155,9 @@ def convert_openvla_weights_to_hf(cfg: HFConvertConfig) -> None:
         arch_specifier=prismatic_config["arch_specifier"],
         image_resize_strategy=prismatic_config["image_resize_strategy"],
         llm_max_length=prismatic_config["llm_max_length"],
-        torch_dtype=torch.bfloat16,
+        torch_dtype=torch.bfloat16, 
         norm_stats=norm_stats,
+        use_fused_vision_backbone=True,
     )
 
     # Instantiate & Add Pad to Tokenizer =>> following `prismatic.models.materialize.get_llm_backbone_and_tokenizer`

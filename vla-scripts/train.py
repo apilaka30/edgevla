@@ -49,12 +49,16 @@ class TrainConfig:
 
     # VLAConfig (`prismatic/conf/vla.py`); override with --vla.type `VLARegistry.<VLA>.vla_id`
     vla: VLAConfig = field(
-        default_factory=VLAConfig.get_choice_class(VLARegistry.DINOSIGLIP_224PX_MX_OXE_MAGIC_SOUP_PLUS.vla_id)
+        default_factory=VLAConfig.get_choice_class(VLARegistry.TINYLLAMA_DINOSIGLIP_224px_MX_TINY_LLAMA_MIX.vla_id)
     )
+    # vla: VLAConfig = field(
+    #     default_factory=VLAConfig.get_choice_class(VLARegistry.DINOSIGLIP_224PX_MX_OXE_MAGIC_SOUP_PLUS.vla_id)
+    # )
+    
 
     # Directory Paths
     data_root_dir: Path = Path(                                     # Path to Open-X dataset directory
-        "datasets/open-x-embodiment"
+        "/home/amey/robot_learning/x-prismatic-vlms/download"
     )
     run_root_dir: Path = Path("runs")                               # Path to directory to store logs & checkpoints
 
@@ -79,6 +83,7 @@ class TrainConfig:
     trackers: Tuple[str, ...] = ("jsonl", "wandb")                  # Trackers to initialize (if W&B, add config!)
     wandb_project: str = "openvla"                                  # Name of W&B project to log to (use default!)
     wandb_entity: str = "stanford-voltron"                          # Name of entity to log under
+    using_lora:Optional[bool] = False  
 
     def __post_init__(self) -> None:
         """Lift optimization parameters from `self.vla` for ease of use =>> validate on `expected_world_size`"""
@@ -150,6 +155,7 @@ def train(cfg: TrainConfig) -> None:
         vlm = load_vla(cfg.pretrained_checkpoint, hf_token=hf_token, load_for_training=True)
 
     else:
+        # vla.base_vlm should be a path to the run_dir
         vlm = load(cfg.vla.base_vlm, hf_token=hf_token, load_for_training=True)
 
     # [Validate] Model should be in Full Precision!
@@ -202,7 +208,7 @@ def train(cfg: TrainConfig) -> None:
     # Save dataset statistics for de-normalization at inference time
     if overwatch.is_rank_zero():
         save_dataset_statistics(vla_dataset.dataset_statistics, run_dir)
-
+    
     # Create Train Strategy
     overwatch.info(f"Initializing Train Strategy `{cfg.train_strategy}`")
     train_strategy = get_train_strategy(
@@ -223,6 +229,7 @@ def train(cfg: TrainConfig) -> None:
         enable_mixed_precision_training=cfg.vla.enable_mixed_precision_training,
         reduce_in_full_precision=cfg.vla.reduce_in_full_precision,
         worker_init_fn=worker_init_fn,
+        using_lora=cfg.using_lora
     )
     train_strategy.run_setup(run_dir=run_dir, n_train_examples=len(vla_dataset))
 

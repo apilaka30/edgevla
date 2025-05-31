@@ -33,6 +33,9 @@ from prismatic.models.vlms import PrismaticVLM
 from prismatic.overwatch import initialize_overwatch
 from prismatic.training.strategies.base_strategy import TrainingStrategy
 
+from peft import get_peft_model
+from peft.tuners.lora.config import LoraConfig
+
 # Initialize Overwatch =>> Wraps `logging.Logger`
 overwatch = initialize_overwatch(__name__)
 
@@ -58,6 +61,7 @@ class FSDPStrategy(TrainingStrategy):
         mixed_precision_dtype: torch.dtype = torch.bfloat16,
         worker_init_fn: Optional[Callable[[int], None]] = None,
         sharding_strategy: str = "shard-grad-op",
+        using_lora: bool = False,
         state_dict_type: StateDictType = StateDictType.FULL_STATE_DICT,
     ) -> None:
         super().__init__(
@@ -78,6 +82,7 @@ class FSDPStrategy(TrainingStrategy):
             reduce_in_full_precision=reduce_in_full_precision,
             mixed_precision_dtype=mixed_precision_dtype,
             worker_init_fn=worker_init_fn,
+            using_lora=using_lora
         )
 
         # FSDP-Specific Parameters
@@ -103,34 +108,84 @@ class FSDPStrategy(TrainingStrategy):
         """Save a checkpoint to the `run_dir` only containing the state_dicts for trainable parameters by default."""
         assert isinstance(self.vlm, FSDP), "FSDPStrategy.save_checkpoint assumes VLM is already wrapped in FSDP!"
 
-        # Summon Full State Dictionary =>> Reconstitute from Shards
-        with FSDP.state_dict_type(self.vlm, self.fsdp_state_dict_type, self.fsdp_save_policy):
-            full_vlm_state_dict = self.vlm.state_dict()
-            model_state_dicts = {
-                mkey: OrderedDict() for mkey in (self.trainable_module_keys if only_trainable else self.all_module_keys)
-            }
+        # # Summon Full State Dictionary =>> Reconstitute from Shards
+        # with FSDP.state_dict_type(self.vlm, self.fsdp_state_dict_type, self.fsdp_save_policy):
+        #     full_vlm_state_dict = self.vlm.state_dict()
+        #     model_state_dicts = {
+        #         mkey: OrderedDict() for mkey in (self.trainable_module_keys if only_trainable else self.all_module_keys)
+        #     }
 
-            # Iterate through `full_vlm_state_dict` and split `mkey.{full_dotted_path}` -> `mkey: {full_dotted_path}`
-            for key, param in full_vlm_state_dict.items():
-                for mkey in model_state_dicts:
-                    if key.startswith(mprefix := f"{mkey}."):
-                        model_state_dicts[mkey][key.removeprefix(mprefix)] = param
+        # #     # Iterate through `full_vlm_state_dict` and split `mkey.{full_dotted_path}` -> `mkey: {full_dotted_path}`
+        #     for key, param in full_vlm_state_dict.items():
+        #         for mkey in model_state_dicts:
+        #             if key.startswith(mprefix := f"{mkey}."):
+        #                 model_state_dicts[mkey][key.removeprefix(mprefix)] = param
 
-            # Save on rank zero *only*
-            if overwatch.is_rank_zero():
-                checkpoint_dir = run_dir / "checkpoints"
-                if train_loss is None:
-                    checkpoint_path = checkpoint_dir / f"step-{global_step:06d}-epoch-{epoch:02d}-loss=inf.pt"
-                else:
-                    checkpoint_path = (
-                        checkpoint_dir / f"step-{global_step:06d}-epoch-{epoch:02d}-loss={train_loss:.4f}.pt"
-                    )
+        # #     # Save on rank zero *only*
+        #     if overwatch.is_rank_zero():
+        #         checkpoint_dir = run_dir / "checkpoints"
+        #         if train_loss is None:
+        #             checkpoint_path = checkpoint_dir / f"step-{global_step:06d}-epoch-{epoch:02d}-loss=inf.pt"
+        #         else:
+        #             checkpoint_path = (
+        #                 checkpoint_dir / f"step-{global_step:06d}-epoch-{epoch:02d}-loss={train_loss:.4f}.pt"
+        #             )
 
-                # Save Checkpoint & Copy Latest to `latest-checkpoint.pt`
-                torch.save({"model": model_state_dicts}, checkpoint_path)
+        #         # Save Checkpoint & Copy Latest to `latest-checkpoint.pt`
+        #         torch.save({"model": model_state_dicts}, checkpoint_path)
 
-                # TODO (siddk) :: This breaks w/ Sagemaker default permissions (root vs. <user>)... skip?
-                # shutil.copy(checkpoint_path, checkpoint_dir / "latest-checkpoint.pt")
+        # #         # TODO (siddk) :: This breaks w/ Sagemaker default permissions (root vs. <user>)... skip?
+        # #         # shutil.copy(checkpoint_path, checkpoint_dir / "latest-checkpoint.pt")
+
+        # === LoRA MODIFICATION START ===
+        # Extract and save LoRA weights separately
+
+        if hasattr(self, 'using_lora') and self.using_lora:
+            from peft.utils import get_peft_model_state_dict
+            with FSDP.summon_full_params(self.vlm):
+                # Unwrap model properly
+                unwrapped_model = self.vlm.module if hasattr(self.vlm, 'module') else self.vlm
+                # should now be a PEFTModel
+                if overwatch.is_rank_zero():
+                    print("Attempting to save LoRA checkpoint")
+                    
+                    # Use `safe_save=True` to avoid NCCL issues
+                    lora_state_dict = get_peft_model_state_dict(unwrapped_model)
+                    print("Preparing checkpoint")
+
+                    # Create LoRA-specific checkpoint path
+                    lora_checkpoint_dir = run_dir / "lora_checkpoints"
+                    lora_checkpoint_dir.mkdir(exist_ok=True, parents=True)
+
+                    # if train_loss is None:
+                    #     lora_checkpoint_path = lora_checkpoint_dir / f"lora-step-{global_step:06d}-epoch-{epoch:02d}-loss=inf.pt"
+                    # else:
+                    #     lora_checkpoint_path = lora_checkpoint_dir / f"lora-step-{global_step:06d}-epoch-{epoch:02d}-loss={train_loss:.4f}.pt"
+
+                    print("Saving LoRA checkpoint")
+                    # torch.save(lora_state_dict, lora_checkpoint_path)
+                    unwrapped_model.save_pretrained(lora_checkpoint_dir)
+            
+                    # # Save additional training state
+                    # checkpoint = {
+                    #     'epoch': epoch,
+                    #     'step': step,
+                    #     'optimizer': optimizer.state_dict() if optimizer else None,
+                    #     'scheduler': scheduler.state_dict() if scheduler else None,
+                    # }
+                    # torch.save(checkpoint, os.path.join(lora_checkpoint_path, "training_state.pt"))
+
+                    # Create symlink to latest checkpoint (fix symlink path issue)
+                    # latest_path = lora_checkpoint_dir / "latest-lora-checkpoint.pt"
+                    # if latest_path.exists():
+                    #     latest_path.unlink()
+                    # latest_path.symlink_to(lora_checkpoint_path.resolve())
+
+                    # print(f"Saved LoRA checkpoint to {lora_checkpoint_path}")
+        # === LoRA MODIFICATION END ===
+
+        dist.barrier()  # Ensure all ranks sync up
+
 
     def run_setup(self, run_dir: Path, n_train_examples: int) -> None:
         # Iteratively Assemble FSDP Wrapping Policy by fetching the wrapping policies for each backbone/constituent
@@ -155,6 +210,35 @@ class FSDPStrategy(TrainingStrategy):
             fsdp_precision_policy = MixedPrecision(
                 param_dtype=torch.float32, reduce_dtype=torch.float32, buffer_dtype=torch.float32
             )
+
+        # Initialize distributed process group
+        # dist.init_process_group(backend="nccl", world_size=overwatch.world_size())
+        # local_rank = int(os.environ["LOCAL_RANK"])
+        # torch.cuda.set_device(local_rank)
+        # corda_config = CordaConfig(
+        #     corda_method="kpm",
+        # )
+
+        if hasattr(self, 'using_lora') and self.using_lora:
+            # Load model and apply LoRA
+            lora_config = LoraConfig(
+                r=32,                      # Modest rank for decent adaptation
+                lora_alpha=16,            # 2x the rank value for moderate scaling
+                target_modules=[
+                    # For TinyLlama language model
+                    "q_proj", "k_proj", "v_proj", "o_proj",  # Attention modules
+                    "gate_proj", "up_proj", "down_proj",     # MLP modules
+                                                            # For connecting DINOv2 vision backbone
+                    "mm_projector",                         # Vision-to-language projection
+                ],
+                lora_dropout=0.1,        # Small dropout for regularization
+                bias="none",              # No bias adaptation to save parameters
+                task_type="CAUSAL_LM",     # Since TinyLlama is causal
+                # init_lora_weights="corda",
+                # corda_config=corda_config
+            )
+            self.vlm = get_peft_model(self.vlm, lora_config)
+            self.vlm.print_trainable_parameters()
 
         # <FSDP> => note that FSDP will automatically take care of device placement (similar to `autocast`)
         self.vlm = FSDP(
@@ -244,7 +328,7 @@ class FSDPStrategy(TrainingStrategy):
 
         else:
             raise ValueError(f"Learning Rate Schedule with type `{self.lr_scheduler_type}` is not supported!")
-
+                
         # Finalize Setup =>> Log!
         overwatch.info(
             "FSDP Full-Shard Strategy =>> Finalized Training Setup:\n"
@@ -263,6 +347,7 @@ class FSDPStrategy(TrainingStrategy):
             f"         |-> LR Scheduler Warmup Steps (Ratio) = {num_warmup_steps} ({self.warmup_ratio})\n"
             f"         |-> Dataset Size = {n_train_examples} Examples\n"
             f"         |-> Max Steps = {num_training_steps}\n"
+            f"         |-> LoRA Trainable params: {self.vlm.module.print_trainable_parameters()})\n"
         )
 
     def clip_grad_norm(self) -> None:

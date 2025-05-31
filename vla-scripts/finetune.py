@@ -75,20 +75,20 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 @dataclass
 class FinetuneConfig:
     # fmt: off
-    vla_path: str = "openvla/openvla-7b"                            # Path to OpenVLA model (on HuggingFace Hub)
+    vla_path: str = "/home/amey/robot_learning/openvla/runs/tinyllama-dinosiglip-224px+mx-tinyllama_mix+n0+b50+x7/hf_checkpoints"                            # Path to OpenVLA model (on HuggingFace Hub)
 
     # Directory Paths
-    data_root_dir: Path = Path("datasets/open-x-embodiment")        # Path to Open-X dataset directory
-    dataset_name: str = "droid_wipe"                                # Name of fine-tuning dataset (e.g., `droid_wipe`)
+    data_root_dir: Path = Path("/home/amey/robot_learning/openvla/modified_libero_rlds")        # Path to Open-X dataset directory
+    dataset_name: str = "libero_spatial_no_noops"                                # Name of fine-tuning dataset (e.g., `droid_wipe`)
     run_root_dir: Path = Path("runs")                               # Path to directory to store logs & checkpoints
     adapter_tmp_dir: Path = Path("adapter-tmp")                     # Temporary directory for LoRA weights before fusing
 
     # Fine-tuning Parameters
-    batch_size: int = 16                                            # Fine-tuning batch size
-    max_steps: int = 200_000                                        # Max number of fine-tuning steps
-    save_steps: int = 5000                                          # Interval for checkpoint saving
-    learning_rate: float = 5e-4                                     # Fine-tuning learning rate
-    grad_accumulation_steps: int = 1                                # Gradient accumulation steps
+    batch_size: int = 8                                            # Fine-tuning batch size
+    max_steps: int = 10_000                                        # Max number of fine-tuning steps
+    save_steps: int = 2500                                          # Interval for checkpoint saving
+    learning_rate: float = 3e-4                                     # Fine-tuning learning rate
+    grad_accumulation_steps: int = 2                                # Gradient accumulation steps
     image_aug: bool = True                                          # Whether to train with image augmentations
     shuffle_buffer_size: int = 100_000                              # Dataloader shuffle buffer size (can reduce if OOM)
     save_latest_checkpoint_only: bool = True                        # Whether to save only one checkpoint per run and
@@ -98,7 +98,7 @@ class FinetuneConfig:
     # LoRA Arguments
     use_lora: bool = True                                           # Whether to use LoRA fine-tuning
     lora_rank: int = 32                                             # Rank of LoRA weight matrix
-    lora_dropout: float = 0.0                                       # Dropout applied to LoRA weights
+    lora_dropout: float = 0.1                                       # Dropout applied to LoRA weights
     use_quantization: bool = False                                  # Whether to 4-bit quantize VLA for LoRA fine-tuning
                                                                     #   => CAUTION: Reduces memory but hurts performance
 
@@ -158,10 +158,12 @@ def finetune(cfg: FinetuneConfig) -> None:
     vla = AutoModelForVision2Seq.from_pretrained(
         cfg.vla_path,
         torch_dtype=torch.bfloat16,
+        ignore_mismatched_sizes=True,
         quantization_config=quantization_config,
-        low_cpu_mem_usage=True,
+        low_cpu_mem_usage=False,
         trust_remote_code=True,
     )
+    vla.resize_token_embeddings(32000)
 
     # Device Placement =>> note that BitsAndBytes automatically handles for quantized training
     if cfg.use_quantization:
@@ -175,6 +177,12 @@ def finetune(cfg: FinetuneConfig) -> None:
             r=cfg.lora_rank,
             lora_alpha=min(cfg.lora_rank, 16),
             lora_dropout=cfg.lora_dropout,
+            # target_modules=[
+            #         # For TinyLlama language model
+            #         "q_proj", "k_proj", "v_proj", "o_proj",  # Attention modules
+            #                                                 # For connecting DINOv2 vision backbone
+            #         "mm_projector", "all-linear"                        # Vision-to-language projection
+            #     ],
             target_modules="all-linear",
             init_lora_weights="gaussian",
         )

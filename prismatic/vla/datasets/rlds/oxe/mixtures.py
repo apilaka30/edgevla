@@ -188,6 +188,22 @@ OXE_NAMED_MIXTURES: Dict[str, List[Tuple[str, float]]] = {
         ("tdroid_cover_object_with_towel", 1.0),
     ],
 
+    # Our own dataset mixture
+    # Google RTX - 111GB - Robot picks, places and moves 17 objects from the google micro kitchens.
+    # Austin BUDS - 1.49GB - The robot is trying to solve a long-horizon kitchen task by picking up pot, 
+    #               placing the pot in a plate, and push them together using a picked-up tool.
+    # Berkeley Fanuc - 8 GB - A Fanuc robot performs various manipulation tasks. 
+    #               For example, it opens drawers, picks up objects, closes doors, closes computers, and pushes objects to desired locations.
+    # CMU Stretch
+    # NYU Franka Play - 1.5GB - A Franka robot performs various manipulation tasks.
+    "tinyllama_mix": [
+        ("fractal20220817_data", 0.54087122203),
+        ("austin_buds_dataset_converted_externally_to_rlds", 1.0),
+        ("nyu_franka_play_dataset_converted_externally_to_rlds", 3.0),
+        ("berkeley_fanuc_manipulation", 2.0),
+        ("cmu_stretch", 1.0),
+    ],
+
     # === DROID Finetuning Datasets ===
     "droid_wipe": [
         ("droid_wipe", 1.0),

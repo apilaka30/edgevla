@@ -7,7 +7,7 @@ Default configuration specifies `siglip-224px+7b`.
 
 from typing import Any, Dict, List, Optional
 
-from transformers import PretrainedConfig
+from transformers import PretrainedConfig, LlamaConfig
 from transformers.models.auto import CONFIG_MAPPING
 
 # === Utilities for Mapping Prismatic names to HF names ===
@@ -47,6 +47,7 @@ TIMM_OVERRIDE_ACT_LAYER: Dict[str, List[Optional[str]]] = {
 LLM_BACKBONE_TO_HF_PATH = {
     "llama2-7b-pure": "meta-llama/Llama-2-7b-hf", "llama2-13b-pure": "meta-llama/Llama-2-13b-hf",
     "llama2-7b-chat": "meta-llama/Llama-2-7b-chat-hf", "llama2-13b-chat": "meta-llama/Llama-2-13b-chat-hf",
+    "llama2-1b-chat": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
 
     "vicuna-v15-7b": "lmsys/vicuna-7b-v1.5", "vicuna-v15-13b": "lmsys/vicuna-13b-v1.5",
 
@@ -57,6 +58,7 @@ LLM_BACKBONE_TO_HF_PATH = {
 }
 LLM_BACKBONE_TO_HF_METACLASS = {
     "llama2-7b-pure": "llama", "llama2-13b-pure": "llama", "llama2-7b-chat": "llama", "llama2-13b-chat": "llama",
+    "llama2-1b-chat": "tinyllama",
     "vicuna-v15-7b": "llama", "vicuna-v15-13b": "llama",
 
     "mistral-v0.1-7b-pure": "mistral", "mistral-v0.1-7b-instruct": "mistral",
@@ -100,11 +102,18 @@ class PrismaticConfig(PretrainedConfig):
         self.output_projector_states = output_projector_states
 
         # [Contract] All vision backbone parameters are lists =>> supports fused backbones with different preprocessing
+        # self.use_fused_vision_backbone = (
+        #     use_fused_vision_backbone
+        #     if use_fused_vision_backbone is not None
+        #     else any(self.vision_backbone_id.startswith(v) for v in ["dinoclip", "dinosiglip"])
+        # )
+
         self.use_fused_vision_backbone = (
             use_fused_vision_backbone
             if use_fused_vision_backbone is not None
-            else any(self.vision_backbone_id.startswith(v) for v in ["dinoclip", "dinosiglip"])
+            else arch_specifier.endswith("fused-gelu-mlp")
         )
+        
 
         self.timm_model_ids = VISION_BACKBONE_TO_TIMM_ID[self.vision_backbone_id]
         self.timm_override_act_layers = TIMM_OVERRIDE_ACT_LAYER[self.vision_backbone_id]
@@ -115,12 +124,15 @@ class PrismaticConfig(PretrainedConfig):
         self.llm_max_length = llm_max_length
         self.pad_token_id, self.pad_to_multiple_of = pad_token_id, pad_to_multiple_of
 
-        # [IMPORTANT] HF Utilities actually look for a `text_config` field... we need to use that specific naming!
-        self.text_config = (
-            CONFIG_MAPPING[LLM_BACKBONE_TO_HF_METACLASS[self.llm_backbone_id]](**text_config)
-            if text_config is not None
-            else CONFIG_MAPPING[LLM_BACKBONE_TO_HF_METACLASS[self.llm_backbone_id]]()
-        )
+        if LLM_BACKBONE_TO_HF_METACLASS[self.llm_backbone_id] == 'tinyllama':
+            self.text_config = LlamaConfig.from_pretrained(self.hf_llm_id)
+        else:
+            # [IMPORTANT] HF Utilities actually look for a `text_config` field... we need to use that specific naming!
+            self.text_config = (
+                CONFIG_MAPPING[LLM_BACKBONE_TO_HF_METACLASS[self.llm_backbone_id]](**text_config)
+                if text_config is not None
+                else CONFIG_MAPPING[LLM_BACKBONE_TO_HF_METACLASS[self.llm_backbone_id]]()
+            )
 
         # Dispatch **kwargs to super() =>> note that `pad_token_id` collides, so we pass it in here as well...
         super().__init__(pad_token_id=pad_token_id, **kwargs)

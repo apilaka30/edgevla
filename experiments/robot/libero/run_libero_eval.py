@@ -83,9 +83,52 @@ class GenerateConfig:
     wandb_entity: str = "YOUR_WANDB_ENTITY"          # Name of entity to log under
 
     seed: int = 7                                    # Random Seed (for reproducibility)
+    aug_period: int = 1
+    use_augmentation: bool = False
 
     # fmt: on
 
+def add_gaussian_noise(image, mean=0, std=25):
+    """Add Gaussian noise to an image."""
+    noisy_image = image.astype(np.float32)  # Convert to float for proper noise addition
+    noise = np.random.normal(loc=mean, scale=std, size=image.shape)  # Generate Gaussian noise
+    noisy_image += noise  # Add noise to the image
+    noisy_image = np.clip(noisy_image, 0, 255)  # Clip values to valid range
+    return noisy_image.astype(np.uint8)
+
+
+def add_salt_and_pepper_noise(image, salt_prob=0.10, pepper_prob=0.10):
+    """Add salt and pepper noise to image"""
+    noisy_image = np.copy(image)
+    row, col, ch = image.shape
+
+    # Salt noise (white pixels)
+    num_salt = int(np.ceil(salt_prob * row * col))
+    salt_coords = [np.random.randint(0, i - 1, num_salt) for i in image.shape[:2]]
+    noisy_image[salt_coords[0], salt_coords[1], :] = 255
+
+    # Pepper noise (black pixels)
+    num_pepper = int(np.ceil(pepper_prob * row * col))
+    pepper_coords = [np.random.randint(0, i - 1, num_pepper) for i in image.shape[:2]]
+    noisy_image[pepper_coords[0], pepper_coords[1], :] = 0
+
+    return noisy_image.astype(np.uint8)
+
+
+def add_speckle_noise(image, mean=0, var=0.10):
+    """Add speckle noise to image"""
+    image_normalized = image.astype(float) / 255.0
+    
+    row, col, ch = image.shape
+    noise = np.random.normal(mean, var ** 0.5, (row, col, ch))
+    noisy = image_normalized + image_normalized * noise
+    
+    # Clip and convert back to original range
+    noisy = np.clip(noisy, 0, 1) * 255
+    return noisy.astype(np.uint8)
+
+
+IMG_AUGS = [add_gaussian_noise, add_salt_and_pepper_noise, add_speckle_noise]
 
 @draccus.wrap()
 def eval_libero(cfg: GenerateConfig) -> None:
@@ -117,7 +160,10 @@ def eval_libero(cfg: GenerateConfig) -> None:
         processor = get_processor(cfg)
 
     # Initialize local logging
-    run_id = f"EVAL-{cfg.task_suite_name}-{cfg.model_family}-{DATE_TIME}"
+    if cfg.use_augmentation:
+        run_id = f"EVAL-{cfg.task_suite_name}-{cfg.model_family}-aug{cfg.aug_period}"
+    else:
+        run_id = f"EVAL-{cfg.task_suite_name}-{cfg.model_family}-{DATE_TIME}"
     if cfg.run_id_note is not None:
         run_id += f"--{cfg.run_id_note}"
     os.makedirs(cfg.local_log_dir, exist_ok=True)
@@ -142,6 +188,9 @@ def eval_libero(cfg: GenerateConfig) -> None:
 
     # Get expected image dimensions
     resize_size = get_image_resize_size(cfg)
+
+    if cfg.use_augmentation:
+        print(f"Augmentation Period: {cfg.aug_period}")
 
     # Start evaluation
     total_episodes, total_successes = 0, 0
@@ -195,6 +244,11 @@ def eval_libero(cfg: GenerateConfig) -> None:
                     # Get preprocessed image
                     img = get_libero_image(obs, resize_size)
 
+                    if cfg.use_augmentation and (t % cfg.aug_period == 0):
+                        # perform augmentation
+                        augmentation_func = np.random.choice(IMG_AUGS, 1, p=[0.34, 0.33, 0.33])[0]
+                        img = augmentation_func(img)
+                    
                     # Save preprocessed image for replay video
                     replay_images.append(img)
 

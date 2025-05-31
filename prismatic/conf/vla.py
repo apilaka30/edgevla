@@ -90,8 +90,24 @@ class Exp_SigLIP_224px_Bridge(VLAConfig):
 
     train_strategy: str = "fsdp-full-shard"
 
+@dataclass
+class Exp_Tinyllama_DinoSigLIP_224px_TinyLlamaMix(Exp_SigLIP_224px_Bridge):
+    vla_id: str = "tinyllama-dinosiglip-224px+mx-tinyllama_mix"
+    base_vlm: Union[str, Path] = "checkpoints/robot_learning/x-prismatic-vlms/runs/tinyVLM+stage-finetune+x7"
+    data_mix: str = "tinyllama_mix"
 
-# = [8 GPU] SigLIP 224px Frozen Vision Backbone + Bridge =
+    # 2 gpus
+    expected_world_size: int = 2
+    learning_rate: float = 1e-5
+    lr_scheduler_type: str = "constant"
+    weight_decay: float = 0.1
+
+    per_device_batch_size: int = 50
+    global_batch_size: int = per_device_batch_size * expected_world_size
+    max_steps: Optional[int] = 11000
+
+
+
 @dataclass
 class Exp_FreezeVIT_SigLIP_224px_Bridge(Exp_SigLIP_224px_Bridge):
     vla_id: str = "siglip-224px-icy+mx-bridge"
@@ -213,6 +229,8 @@ class VLARegistry(Enum):
 
     # [OpenVLA 7B] DINO + SigLIP 224px + OXE Magic Soup++
     DINOSIGLIP_224PX_MX_OXE_MAGIC_SOUP_PLUS = Exp_DinoSigLIP_224px_OXE_Magic_Soup_Plus
+
+    TINYLLAMA_DINOSIGLIP_224px_MX_TINY_LLAMA_MIX = Exp_Tinyllama_DinoSigLIP_224px_TinyLlamaMix
 
     # === TDROID Fine-tuning Configs ===
     SIGLIP_224PX_MX_TDROID_CARROT_IN_BOWL = Exp_SigLIP_224px_TDROID_CarrotInBowl

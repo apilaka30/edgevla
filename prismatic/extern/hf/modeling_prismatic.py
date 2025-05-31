@@ -239,7 +239,7 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
 
         # Create Multimodal Projector
         self.projector = PrismaticProjector(
-            config.use_fused_vision_backbone,
+            not config.use_fused_vision_backbone,
             vision_dim=self.vision_backbone.embed_dim,
             llm_dim=config.text_config.hidden_size,
         )
