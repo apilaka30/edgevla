@@ -42,7 +42,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 # === Constants ===
-BASE_DIR = Path("/bigscratch/apilaka/llava-v1.5-instruct")
+BASE_DIR = Path("/bigscratch/apilaka/download/llava-v1.5-instruct")
 LRV_DIR = BASE_DIR / "lrv"
 
 VG_JSON_FILES, VG_IMG_DIR = [LRV_DIR / "filter_cap1.json", LRV_DIR / "filter_cap_more1.json"], LRV_DIR / "lrv-vg"
@@ -118,22 +118,23 @@ def build_lrv_instruct() -> None:
     # Merge and Create Full LRV Chat Data =>> Total of 342,799 Examples
     lrv_data = vg_chat_json + chart_chat_json
 
-    # Create Stacked Datasets =>> Shuffle for Good Measure!
-    print("[*] Loading LLaVa v1.5 Data!")
-    with open(BASE_JSON_FILE, "r") as f:
-        llava_v15_data = json.load(f)
+    # # Create Stacked Datasets =>> Shuffle for Good Measure!
+    # print("[*] Loading LLaVa v1.5 Data!")
+    # with open(BASE_JSON_FILE, "r") as f:
+    #     llava_v15_data = json.load(f)
 
-    # Combine & Shuffle & Write
-    llava_lrv_data = llava_v15_data + lrv_data
+    # # Combine & Shuffle & Write
+    # llava_lrv_data = llava_v15_data + lrv_data
 
-    random.shuffle(llava_lrv_data)
-    random.shuffle(llava_lrv_data)
-    random.shuffle(llava_lrv_data)
+    # random.shuffle(llava_lrv_data)
+    # random.shuffle(llava_lrv_data)
+    # random.shuffle(llava_lrv_data)
 
-    with open(MERGED_BASE_LRV_JSON_FILE, "w") as f:
-        json.dump(llava_lrv_data, f)
+    # with open(MERGED_BASE_LRV_JSON_FILE, "w") as f:
+    #     print(f"[*] Writing Merged LRV Data to `{MERGED_BASE_LRV_JSON_FILE}`")
+    #     json.dump(llava_lrv_data, f)
 
-    print("[*] Loading LLaVa v1.5 + LVIS-4V Instruct Data!")
+    print("[*] Loading LLaVa v1.5 + LVIS-4V Instruct Data!")    
     with open(BASE_LVIS_JSON_FILE, "r") as f:
         llava_v15_lvis_data = json.load(f)
 

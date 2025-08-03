@@ -44,7 +44,7 @@ class LLaVa_V15_Config(DatasetConfig):
         Path("download/llava-v1.5-instruct/"),
     )
     #dataset_root_dir: Path = Path("/mnt/fsx/skaramcheti/datasets/prismatic-vlms")
-    dataset_root_dir: Path = Path("/home/amey/robot_learning/x-prismatic-vlms")
+    dataset_root_dir: Path = Path("/bigscratch/apilaka")
 
 
 # [Multimodal-Only] LLava-v15 WITHOUT the Language-Only ShareGPT Data (No Co-Training)
@@ -92,7 +92,8 @@ class LLaVa_LRV_Config(DatasetConfig):
         Path("download/llava-v1.5-instruct/llava_v1_5_lrv_mix1008k.json"),
         Path("download/llava-v1.5-instruct/"),
     )
-    dataset_root_dir: Path = Path("/mnt/fsx/skaramcheti/datasets/prismatic-vlms")
+    # dataset_root_dir: Path = Path("/mnt/fsx/skaramcheti/datasets/prismatic-vlms")
+    dataset_root_dir: Path = Path("/bigscratch/apilaka")
 
 
 # LLaVa-v15 + LVIS-Instruct-4V + LRV-Instruct
@@ -108,7 +109,7 @@ class LLaVa_LVIS4V_LRV_Config(DatasetConfig):
         Path("download/llava-v1.5-instruct/llava_v1_5_lvis4v_lrv_mix1231k.json"),
         Path("download/llava-v1.5-instruct/"),
     )
-    dataset_root_dir: Path = Path("/mnt/fsx/skaramcheti/datasets/prismatic-vlms")
+    dataset_root_dir: Path = Path("/bigscratch/apilaka")
 
 
 # === Define a Dataset Registry Enum for Reference & Validation =>> all *new* datasets must be added here! ===

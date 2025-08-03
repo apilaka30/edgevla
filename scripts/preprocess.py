@@ -27,7 +27,7 @@ overwatch = initialize_overwatch(__name__)
 class PreprocessConfig:
     # fmt: off
     dataset_id: str = "llava-v1.5-instruct"                     # Unique identifier for dataset to process (see above)
-    root_dir: Path = Path("data")                               # Path to root directory for storing datasets
+    root_dir: Path = Path("/bigscratch/apilaka")                               # Path to root directory for storing datasets
 
     # fmt: on
 

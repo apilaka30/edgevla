@@ -32,8 +32,8 @@ from prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, Pr
 class HFConvertConfig:
     # fmt: off
     prismatic_model_path_or_id: Union[str, Path] = (                    # Path to Pretrained VLM (on disk or HF Hub)
-        "siglip-224px+7b"
-        # "prism-dinosiglip-224px+7b"
+        # "siglip-224px+7b"
+        "prism-dinosiglip-224px+7b"
     )
     output_hf_model_local_path: Path = Path(                            # Path to Local Path to save HF model
         "hf-convert/prismatic-siglip-224px-7b"

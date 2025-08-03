@@ -92,19 +92,28 @@ class Exp_SigLIP_224px_Bridge(VLAConfig):
 
 @dataclass
 class Exp_Tinyllama_DinoSigLIP_224px_TinyLlamaMix(Exp_SigLIP_224px_Bridge):
-    vla_id: str = "tinyllama-dinosiglip-224px+mx-tinyllama_mix"
-    base_vlm: Union[str, Path] = "checkpoints/robot_learning/x-prismatic-vlms/runs/tinyVLM+stage-finetune+x7"
-    data_mix: str = "tinyllama_mix"
+    vla_id: str = "edgevla"
+    base_vlm: Union[str, Path] = Path("/home/apilaka/edgevla/checkpoints/vlm/llava-lvis-lrv")
+    data_mix: str = "bridge_rt_1"#"rtx"#"tinyllama_mix"
+    shuffle_buffer_size: int = 30_000
 
-    # 2 gpus
-    expected_world_size: int = 2
-    learning_rate: float = 1e-5
-    lr_scheduler_type: str = "constant"
-    weight_decay: float = 0.1
+    lora_rank = 64
+    lora_alpha = 128
 
-    per_device_batch_size: int = 50
-    global_batch_size: int = per_device_batch_size * expected_world_size
-    max_steps: Optional[int] = 11000
+    learning_rate: float = 7e-7 #1e-6
+    lr_scheduler_type: str = "constant"#"linear-warmup+cosine-decay"
+    warmup_ratio: float = 0.03
+    weight_decay: float = 1e-2
+
+    # 4 gpus
+    expected_world_size: int = 4
+    per_device_batch_size: int = 31 #100 #108
+    global_batch_size: int = per_device_batch_size*4*17#per_device_batch_size * expected_world_size
+    # max_steps: Optional[int] = 11000
+    epochs: int = 10
+
+    freeze_vision_backbone: bool = False #True #True
+    enable_mixed_precision_training: bool = True
 
 
 
@@ -230,7 +239,7 @@ class VLARegistry(Enum):
     # [OpenVLA 7B] DINO + SigLIP 224px + OXE Magic Soup++
     DINOSIGLIP_224PX_MX_OXE_MAGIC_SOUP_PLUS = Exp_DinoSigLIP_224px_OXE_Magic_Soup_Plus
 
-    TINYLLAMA_DINOSIGLIP_224px_MX_TINY_LLAMA_MIX = Exp_Tinyllama_DinoSigLIP_224px_TinyLlamaMix
+    EDGEVLA = Exp_Tinyllama_DinoSigLIP_224px_TinyLlamaMix
 
     # === TDROID Fine-tuning Configs ===
     SIGLIP_224PX_MX_TDROID_CARROT_IN_BOWL = Exp_SigLIP_224px_TDROID_CarrotInBowl

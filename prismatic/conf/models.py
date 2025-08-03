@@ -106,7 +106,7 @@ class LLaVa_v15_Reproduction_7B(ModelConfig):
     finetune_per_device_batch_size: int = 16
 
     finetune_learning_rate: float = 2e-5
-    finetune_weight_decay: float = 0.1
+    finetune_weight_decay: float = 1e-1
     finetune_max_grad_norm: float = 1.0
     finetune_lr_scheduler_type: str = "linear-warmup+cosine-decay"
     finetune_warmup_ratio: float = 0.03
@@ -269,41 +269,31 @@ class Ext_Exp_13B_Llama2_Chat(Exp_13B_One_Stage):
     model_id: str = "llama2-chat+13b"
     llm_backbone_id: str = "llama2-13b-chat"
 
-# @dataclass
-# class Ext_Exp_1B_Llama2_Chat(Exp_7B_One_Stage):
-#     model_id: str = "llama2-chat+1b"
-#     llm_backbone_id: str = "llama2-1b-chat"
-#     vision_backbone_id: str = "dinosiglip-vit-so-224px"
-
-#     finetune_learning_rate: float = 3e-5
-#     align_epochs: int = 2  # Increase alignment training
-#     finetune_epochs: int = 2  # More fine-tuning epochs
-#     finetune_max_steps: Optional[int] = 11000
-
-#     align_per_device_batch_size: int = 10
-    
-#     align_global_batch_size: int = align_per_device_batch_size * 4  # 2 GPUs and 2 gradient_accumulation_steps
-
-#     finetune_per_device_batch_size: int = 10
-#     finetune_global_batch_size: int = finetune_per_device_batch_size * 4
 
 @dataclass
 class Ext_Exp_1B_Llama2_Chat(Exp_7B_One_Stage):
-    model_id: str = "checkpoints/robot_learning/x-prismatic-vlms/runs/tinyVLM+stage-finetune+x7"
+    model_id: str = "edgevlm+2b"
+    base_vlm: str = "/bigscratch/apilaka/vlm/runs/edgevlm+2b+stage-finetune-fp32False-lr0.0004+batch320+x42" #only for resuming vla training nothing more
     llm_backbone_id: str = "llama2-1b-chat"
     vision_backbone_id: str = "dinosiglip-vit-so-224px"
+    enable_mixed_precision_training: bool = True
 
-    finetune_learning_rate: float = 3e-5
-    align_epochs: int = 2  # Increase alignment training
-    finetune_epochs: int = 2  # More fine-tuning epochs
-    finetune_max_steps: Optional[int] = 11000
+    # LoRA Params
+    finetune_lora_rank = 32
+    finetune_lora_alpha = 64
 
-    align_per_device_batch_size: int = 10
+    finetune_learning_rate: float = 1e-4
+    finetune_weight_decay: float = 1e-1
+    finetune_max_grad_norm: float = 1.0
+    finetune_lr_scheduler_type: str = "linear-warmup+cosine-decay"
+    finetune_warmup_ratio: float = 0.05
+    reduce_in_full_precision: bool = False
     
-    align_global_batch_size: int = align_per_device_batch_size * 4  # 2 GPUs and 2 gradient_accumulation_steps
+    finetune_epochs: int = 8  # More fine-tuning epochs
+    # finetune_max_steps: Optional[int] = 10 # Just to test checkpointing
 
-    finetune_per_device_batch_size: int = 10
-    finetune_global_batch_size: int = finetune_per_device_batch_size * 4
+    finetune_per_device_batch_size: int = 20 #21
+    finetune_global_batch_size: int = finetune_per_device_batch_size * 16 # 4 GPUs and 4 gradient_accumulation_steps
 
 
 @dataclass
