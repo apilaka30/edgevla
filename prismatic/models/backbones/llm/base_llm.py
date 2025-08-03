@@ -122,7 +122,8 @@ class HFCausalLLMBackbone(LLMBackbone, ABC):
             self.llm = llm_cls.from_pretrained(
                 hf_hub_path,
                 token=hf_token,
-                use_flash_attention_2=use_flash_attention_2 if not self.inference_mode else False,
+                # attn_implementation = "xformers" if use_flash_attention_2 else None, #if llm_backbone_id == "llama2-1b-chat" else None,
+                # use_flash_attention_2=use_flash_attention_2 if not (self.inference_mode) else False,
                 # The following parameters are set to prevent `UserWarnings` from HF; we want greedy decoding!
                 do_sample=False,
                 temperature=1.0,

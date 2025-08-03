@@ -161,4 +161,5 @@ class DinoSigLIPViTBackbone(VisionBackbone):
 
     @property
     def half_precision_dtype(self) -> torch.dtype:
-        return torch.bfloat16
+        # return torch.bfloat16
+        return torch.float16

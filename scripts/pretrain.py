@@ -51,12 +51,12 @@ class PretrainConfig:
 
     # ModelConfig (`prismatic/conf/models.py`); override with --model.type `ModelRegistry.<MODEL>.model_id`
     model: ModelConfig = field(
-        default_factory=ModelConfig.get_choice_class(ModelRegistry.PRISM_DINOSIGLIP_CONTROLLED_7B.model_id)
+        default_factory=ModelConfig.get_choice_class(ModelRegistry.EXT_EXP_LLAMA2_CHAT_1B.model_id)
     )
 
     # DatasetConfig (`prismatic/conf/datasets.py`); override with --dataset.type `DatasetRegistry.<DATASET>.dataset_id`
     dataset: DatasetConfig = field(
-        default_factory=DatasetConfig.get_choice_class(DatasetRegistry.LLAVA_V15.dataset_id)
+        default_factory=DatasetConfig.get_choice_class(DatasetRegistry.LLAVA_LVIS4V_LRV.dataset_id)
     )
 
     # Pretraining Stage in < align (projector-only) | finetune (projector + LLM) | full-finetune (all) >
@@ -67,7 +67,7 @@ class PretrainConfig:
 
     # Run Arguments
     run_id: Optional[str] = None                                    # Run ID for logging, Weights & Biases
-    run_root_dir: Path = Path("checkpoints/robot_learning/x-prismatic-vlms/runs")     # Path to directory to store logs & checkpoints
+    run_root_dir: Path = Path("/bigscratch/apilaka/vlm/runs")     # Path to directory to store logs & checkpoints
     seed: int = 7                                                   # Random seed (for reproducibility)
 
     # HF Hub Credentials (for any gated models)
@@ -77,7 +77,7 @@ class PretrainConfig:
     trackers: Tuple[str, ...] = ("jsonl", "wandb")                  # Trackers to initialize (if W&B, add config!)
     wandb_project: str = "onyx-vlms"                                # Name of W&B project (default: `prismatic`)
     wandb_entity: Optional[str] = "stanford-voltron"                # Name of W&B entity (default: None)
-    using_lora:Optional[bool] = False                               # Only really applies to FSDP-based training at the moment. Determines whether LoRA (PEFT) is used.
+    using_lora: Optional[bool] = False                               # Only really applies to FSDP-based training at the moment. Determines whether LoRA (PEFT) is used.
 
     def __post_init__(self) -> None:
         """Set optimization parameters based on `stage` in {"align", "finetune"}."""
@@ -126,9 +126,9 @@ def pretrain(cfg: PretrainConfig) -> None:
     # Create Unique Run Name & Save Directory
     model_id = cfg.model.model_id
     if (dataset_id := cfg.dataset.dataset_id) == "llava-v15":
-        cfg.run_id = f"{model_id}+stage-{cfg.stage}+x{cfg.seed}" if cfg.run_id is None else cfg.run_id
+        cfg.run_id = f"{model_id}+stage-{cfg.stage}-lora{cfg.using_lora}-fp32{not cfg.model.enable_mixed_precision_training}-lr{cfg.learning_rate}+batch{cfg.global_batch_size}+x{cfg.seed}" if cfg.run_id is None else cfg.run_id
     else:
-        cfg.run_id = f"{dataset_id}+{model_id}+stage-{cfg.stage}+x{cfg.seed}" if cfg.run_id is None else cfg.run_id
+        cfg.run_id = f"{dataset_id}+{model_id}+stage-{cfg.stage}-lora{cfg.using_lora}+fp32{not cfg.model.enable_mixed_precision_training}-lr{cfg.learning_rate}+batch{cfg.global_batch_size}+x{cfg.seed}" if cfg.run_id is None else cfg.run_id
 
     # Start =>> Build Directories and Set Randomness
     overwatch.info('"Life is like a prism; what you see depends on how you turn the glass."', ctx_level=1)
@@ -206,9 +206,12 @@ def pretrain(cfg: PretrainConfig) -> None:
         reduce_in_full_precision=cfg.model.reduce_in_full_precision,
         worker_init_fn=worker_init_fn,
         using_lora=cfg.using_lora,
+        lora_rank=cfg.model.finetune_lora_rank,
+        lora_alpha=cfg.model.finetune_lora_alpha,
+        mixed_precision_dtype=torch.float16 if cfg.model.enable_mixed_precision_training else torch.float32, # hardcoded becaue V100 don't support bfloat16
     )
     train_strategy.run_setup(run_dir=run_dir, n_train_examples=len(train_dataset))
-
+    
     # Create Metrics =>> Handles on the fly tracking, logging to specified trackers (e.g., JSONL, Weights & Biases)
     overwatch.info(f"Creating Metrics with Active Trackers => `{cfg.trackers}`")
     metrics = Metrics(

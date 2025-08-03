@@ -99,7 +99,7 @@ class LLaMa2LLMBackbone(HFCausalLLMBackbone):
     @property
     def half_precision_dtype(self) -> torch.dtype:
         """LLaMa-2 was trained in BF16; see https://huggingface.co/docs/transformers/main/model_doc/llama2."""
-        return torch.bfloat16
+        return torch.float16
 
     @property
     def last_layer_finetune_modules(self) -> Sequence[nn.Module]:

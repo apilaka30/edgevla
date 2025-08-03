@@ -49,38 +49,37 @@ class TrainConfig:
 
     # VLAConfig (`prismatic/conf/vla.py`); override with --vla.type `VLARegistry.<VLA>.vla_id`
     vla: VLAConfig = field(
-        default_factory=VLAConfig.get_choice_class(VLARegistry.TINYLLAMA_DINOSIGLIP_224px_MX_TINY_LLAMA_MIX.vla_id)
+        default_factory=VLAConfig.get_choice_class(VLARegistry.EDGEVLA.vla_id)
     )
     # vla: VLAConfig = field(
     #     default_factory=VLAConfig.get_choice_class(VLARegistry.DINOSIGLIP_224PX_MX_OXE_MAGIC_SOUP_PLUS.vla_id)
     # )
     
-
     # Directory Paths
     data_root_dir: Path = Path(                                     # Path to Open-X dataset directory
-        "/home/amey/robot_learning/x-prismatic-vlms/download"
+        "/bigscratch/apilaka/rlds_datasets/open_x_embodiment"
     )
-    run_root_dir: Path = Path("runs")                               # Path to directory to store logs & checkpoints
+    run_root_dir: Path = Path("/bigscratch/apilaka/vla/runs")                               # Path to directory to store logs & checkpoints
 
     # Resume Run Parameters
-    pretrained_checkpoint: Optional[Path] = None                    # Absolute Path to Checkpoint
+    pretrained_checkpoint: Optional[Path] = Path("/bigscratch/apilaka/vla/runs/edgevla+n1+b2108+x7+loraFalse+lr3e-06+bridge_rt_1--image_aug/checkpoints/step-004000-epoch-05-loss=3.2864.pt")#Path("/bigscratch/apilaka/vla/runs/edgevla+n1+b128+x7+loraFalse+lr3e-06--image_aug/checkpoints/step-022500-epoch-00-loss=2.4178.pt")#Path("/home/apilaka/edgevla/checkpoints/vla/llava-lrv-openx/checkpoints/step-6000-epoch-00-loss=2.9216.pt")                    # Absolute Path to Checkpoint
     is_resume: bool = True                                          # Whether we are continuing a prior training run
                                                                     #   (only applicable given pretrained checkpoint)
-    resume_step: Optional[int] = None                               # Global Step to Resume (should match checkpoint)
-    resume_epoch: Optional[int] = None                              # Epoch to Resume (should match checkpoint)
+    resume_step: Optional[int] = 4000#6000                               # Global Step to Resume (should match checkpoint)
+    resume_epoch: Optional[int] = 5                              # Epoch to Resume (should match checkpoint)
 
     # Run Arguments
     run_id: Optional[str] = None                                    # Run ID for logging, Weights & Biases
     run_id_note: Optional[str] = None                               # Extra note for logging, Weights & Biases
-    save_interval: int = 2500                                       # Interval for saving checkpoints (in steps)
-    image_aug: bool = False                                         # Whether to enable image augmentations
+    save_interval: int = 1000                                       # Interval for saving checkpoints (in steps)
+    image_aug: bool = True                                         # Whether to enable image augmentations
     seed: int = 7                                                   # Random seed (for reproducibility)
 
     # HF Hub Credentials (for any gated models)
     hf_token: Union[str, Path] = Path(".hf_token")                  # Environment variable or Path to HF Token
 
     # Tracking Parameters
-    trackers: Tuple[str, ...] = ("jsonl", "wandb")                  # Trackers to initialize (if W&B, add config!)
+    trackers: Tuple[str, ...] = ("jsonl",)                  # Trackers to initialize (if W&B, add config!)
     wandb_project: str = "openvla"                                  # Name of W&B project to log to (use default!)
     wandb_entity: str = "stanford-voltron"                          # Name of entity to log under
     using_lora:Optional[bool] = False  
@@ -119,7 +118,7 @@ def train(cfg: TrainConfig) -> None:
     # Configure Unique Run Name & Save Directory
     vla_id = cfg.vla.vla_id
     cfg.run_id = (
-        f"{vla_id}+n{cfg.vla.expected_world_size // 8}+b{cfg.per_device_batch_size}+x{cfg.seed}"
+        f"{vla_id}+n{cfg.vla.expected_world_size // 4}+b{cfg.global_batch_size}+x{cfg.seed}+lora{cfg.using_lora}+lr{cfg.learning_rate}+{cfg.vla.data_mix}"
         if cfg.run_id is None
         else cfg.run_id
     )
@@ -229,10 +228,12 @@ def train(cfg: TrainConfig) -> None:
         enable_mixed_precision_training=cfg.vla.enable_mixed_precision_training,
         reduce_in_full_precision=cfg.vla.reduce_in_full_precision,
         worker_init_fn=worker_init_fn,
-        using_lora=cfg.using_lora
+        using_lora=cfg.using_lora,
+        lora_rank=cfg.vla.lora_rank,
+        lora_alpha=cfg.vla.lora_alpha,
+        mixed_precision_dtype=torch.float16 if cfg.vla.enable_mixed_precision_training else torch.float32, # hardcoded becaue V100 don't support bfloat16
     )
     train_strategy.run_setup(run_dir=run_dir, n_train_examples=len(vla_dataset))
-
     # Create Metrics =>> Handles on the fly tracking, logging to specified trackers (e.g., JSONL, Weights & Biases)
     overwatch.info(f"Creating Metrics with Active Trackers => `{cfg.trackers}`")
     metrics = VLAMetrics(

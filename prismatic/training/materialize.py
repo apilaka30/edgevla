@@ -39,6 +39,8 @@ def get_train_strategy(
     mixed_precision_dtype: torch.dtype = torch.bfloat16,
     worker_init_fn: Optional[Callable[[int], None]] = None,
     using_lora: bool = False,
+    lora_rank: int = 32,
+    lora_alpha: int = 64,
 ) -> TrainingStrategy:
     if train_strategy in TRAIN_STRATEGIES:
         strategy_cfg = TRAIN_STRATEGIES[train_strategy]
@@ -61,6 +63,8 @@ def get_train_strategy(
             mixed_precision_dtype=mixed_precision_dtype,
             worker_init_fn=worker_init_fn,
             using_lora=using_lora,
+            lora_rank=lora_rank,
+            lora_alpha=lora_alpha,
             **strategy_cfg["kwargs"],
         )
         return strategy

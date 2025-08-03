@@ -21,6 +21,7 @@ from prismatic.models.vlas import OpenVLA
 from prismatic.models.vlms import PrismaticVLM
 from prismatic.overwatch import initialize_overwatch
 from prismatic.vla.action_tokenizer import ActionTokenizer
+from prismatic.conf import ModelConfig, ModelRegistry
 
 # Initialize Overwatch =>> Wraps `logging.Logger`
 overwatch = initialize_overwatch(__name__)
@@ -59,12 +60,11 @@ def load(
 ) -> PrismaticVLM:
     """Loads a pretrained PrismaticVLM from either local disk or the HuggingFace Hub."""
     if os.path.isdir(model_id_or_path):
-        # checkpoints/robot_learning/x-prismatic-vlms/runs/tinyVLM+stage-finetune+x7
         overwatch.info(f"Loading from local path `{(run_dir := Path(model_id_or_path))}`")
 
         # Get paths for `config.json` and pretrained checkpoint
-        # config_json, checkpoint_pt = run_dir / "config.json", run_dir / "checkpoints" / "latest-checkpoint.pt"
-        config_json, checkpoint_pt = run_dir / "config.json", run_dir / "lora_checkpoints"
+        config_json, checkpoint_pt = run_dir / "config.json", run_dir / "checkpoints" / "latest-checkpoint.pt"
+        # config_json, checkpoint_pt = run_dir / "config.json", run_dir / "lora_checkpoints"
         assert config_json.exists(), f"Missing `config.json` for `{run_dir = }`"
         assert checkpoint_pt.exists(), f"Missing checkpoint for `{run_dir = }`"
     else:
@@ -112,27 +112,18 @@ def load(
     overwatch.info(f"Loading VLM [bold blue]{model_cfg['model_id']}[/] from Checkpoint")
 
     # Not loading from pretrained in this way because we have to combine lora params with the vlm params
-    # vlm = PrismaticVLM.from_pretrained(
-    #     checkpoint_pt,
-    #     model_cfg["model_id"],
-    #     vision_backbone,
-    #     llm_backbone,
-    #     arch_specifier=model_cfg["arch_specifier"],
-    #     freeze_weights=not load_for_training,
-    # )
-
-    # pulls original pretrained llm and vision backbones from HF
-    vlm = get_vlm(
+    vlm = PrismaticVLM.from_pretrained(
+        checkpoint_pt,
         model_cfg["model_id"],
-        model_cfg["arch_specifier"],
         vision_backbone,
         llm_backbone,
-        enable_mixed_precision_training=model_cfg["enable_mixed_precision_training"],
+        arch_specifier=model_cfg["arch_specifier"],
+        freeze_weights=not load_for_training,
     )
 
-    # Update the model with the lora params
-    vlm = PeftModel.from_pretrained(vlm, checkpoint_pt)
-    vlm = vlm.merge_and_unload()
+    # # Update the model with the lora params
+    # vlm = PeftModel.from_pretrained(vlm, Path("/bigscratch/apilaka/vla/runs/edgevla+n1+b108+x42/lora-step-001000-epoch-00-loss=3.2991"))
+    # vlm = vlm.merge_and_unload()
 
     return vlm
 
@@ -194,7 +185,8 @@ def load_vla(
     # Load VLA Config (and corresponding base VLM `ModelConfig`) from `config.json`
     with open(config_json, "r") as f:
         vla_cfg = json.load(f)["vla"]
-        model_cfg = ModelConfig.get_choice_class(vla_cfg["base_vlm"])()
+        # model_cfg = ModelConfig.get_choice_class(vla_cfg["base_vlm"])()
+        model_cfg = ModelConfig.get_choice_class(ModelRegistry.EXT_EXP_LLAMA2_CHAT_1B.model_id)
 
     # Load Dataset Statistics for Action Denormalization
     with open(dataset_statistics_json, "r") as f:

@@ -11,6 +11,7 @@ heavy lifting.
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Callable, Optional
+from collections import deque
 
 import torch
 import torch.distributed as dist
@@ -52,11 +53,16 @@ class TrainingStrategy(ABC):
         mixed_precision_dtype: torch.dtype = torch.bfloat16,
         worker_init_fn: Optional[Callable[[int], None]] = None,
         using_lora: bool = False,
+        lora_rank: int = 32,
+        lora_alpha: int = 64,
         **_: str,
     ) -> None:
         self.vlm, self.device_id, self.stage = vlm, device_id, stage
 
+        # LoRA Parameters
         self.using_lora = using_lora
+        self.lora_rank = lora_rank
+        self.lora_alpha = lora_alpha
 
         # Get relevant VLM instance parameters before they get (potentially) wrapped
         self.all_module_keys, self.trainable_module_keys = self.vlm.all_module_keys, self.vlm.trainable_module_keys
@@ -86,9 +92,14 @@ class TrainingStrategy(ABC):
             self.global_batch_size % self.per_device_batch_size == 0
         ), "Per-device batch size must evenly divide global batch size!"
         self.grad_accumulation_steps = self.global_batch_size // self.per_device_batch_size // overwatch.world_size()
+
         if self.enable_mixed_precision_training:
-            assert self.mixed_precision_dtype == torch.bfloat16, "Only BF16 mixed precision training is supported!"
-            assert check_bloat16_supported(), "BFloat16 is not supported on this hardware; unset `mixed_precision`"
+            assert self.mixed_precision_dtype in {torch.bfloat16, torch.float16}, (
+                "mixed_precision_dtype must be bf16 or fp16"
+            )
+            if self.mixed_precision_dtype == torch.bfloat16:
+                from prismatic.util import check_bloat16_supported
+                assert check_bloat16_supported(), "BF16 unsupported on this hardware"
 
     @abstractmethod
     def save_checkpoint(
@@ -209,17 +220,31 @@ class TrainingStrategy(ABC):
                     #   just really tanks in precision... and don't have a good/clean way to fix this. Would love for
                     #   someone to PR and fix this (and I'd greatly appreciate it!!!)
                     normalized_loss = loss / self.grad_accumulation_steps
-                    normalized_loss.backward()
+
+                    if self.scaler.is_enabled():
+                        self.scaler.scale(normalized_loss).backward()
+                    else:
+                        normalized_loss.backward()
 
                     # Step =>> Only if Done w/ Gradient Accumulation
                     if (train_idx + 1) % self.grad_accumulation_steps == 0:
                         metrics.commit(update_step_time=True)
 
                         # Clip Gradients --> this is custom, per-strategy because of DDP vs. FSDP locality-assumptions
-                        self.clip_grad_norm()
+                        # self.clip_grad_norm()
 
                         # Optimizer & LR Scheduler Step
-                        self.optimizer.step()
+                        if self.scaler.is_enabled():
+                            # reference: https://docs.pytorch.org/docs/stable/notes/amp_examples.html#gradient-clipping
+                            # unscale_() needed before clipping (don't need to do this manually but doing it here so we can call clip_grad_norm() directly before using scaler.step())
+                            self.scaler.unscale_(self.optimizer)
+                            self.clip_grad_norm()
+                            self.scaler.step(self.optimizer)
+                            self.scaler.update()
+                        else:
+                            self.clip_grad_norm()
+                            self.optimizer.step()
+
                         self.lr_scheduler.step()
                         self.optimizer.zero_grad()
 
@@ -228,11 +253,10 @@ class TrainingStrategy(ABC):
                         status = metrics.push()
 
                         # Check for Termination & Save Final Checkpoint (in case `max_steps` is not None)
-                        if self.max_steps is not None and metrics.global_step >= self.max_steps:
+                        if self.max_steps is not None and metrics.global_step >= self.max_steps or metrics.global_step % 1000 == 0: # when forced termination or every so often throughout training
                             self.save_checkpoint(metrics.run_dir, metrics.global_step, epoch, loss.item())
                             dist.barrier()
-
-                            return
+                            # return
 
                         # Update Progress Bar
                         progress.update()
@@ -251,12 +275,12 @@ class TrainingStrategy(ABC):
         collator: PaddedCollatorForActionPrediction,
         action_tokenizer: ActionTokenizer,
         metrics: VLAMetrics,
-        save_interval: int = 2500,
+        save_interval: int = 1000,
         save_full_model: bool = True,
     ) -> None:
         """Run the VLA training loop for the given `dataset` and `collator`; log losses, action metrics to `metrics`."""
         assert isinstance(vla_dataset, IterableDataset), "VLA training expects an IterableDataset!"
-        assert self.grad_accumulation_steps == 1, "VLA training does not support gradient accumulation!"
+        # assert self.grad_accumulation_steps == 1, "VLA training does not support gradient accumulation!"
 
         # Create a DataLoader =>> Set `num_workers` to 0; RLDS loader handles parallelism!
         dataloader = DataLoader(
@@ -267,6 +291,10 @@ class TrainingStrategy(ABC):
             num_workers=0,
             worker_init_fn=self.worker_init_fn,
         )
+
+        recent_losses = deque(maxlen=self.grad_accumulation_steps)
+        recent_action_accuracies = deque(maxlen=self.grad_accumulation_steps)
+        recent_l1_losses = deque(maxlen=self.grad_accumulation_steps)
 
         # === Train ===
         status = metrics.get_status()
@@ -284,7 +312,7 @@ class TrainingStrategy(ABC):
             # [Contract] DataLoader wraps RLDS Loader (`.as_numpy_iterator() =>> implicit `.repeat()`)
             #   => This means looping over the DataLoader is basically "infinite" (so no outer loop over epochs).
             #      Slightly breaks default PyTorch semantics, which is why we adaptively compute `epoch` below.
-            for batch in dataloader:
+            for batch_idx, batch in enumerate(dataloader):
                 # Note that we'll unpack batch (and let AMP/FSDP do its thing) in the VLM.forward() call
                 #   => Basically, if we're using mixed precision (or not), autocast()/FSDP will move to device!
                 with torch.autocast(
@@ -300,8 +328,15 @@ class TrainingStrategy(ABC):
                     loss = output.loss
 
                 # Commit Loss =>> Backward!
-                metrics.commit(loss=loss)
-                loss.backward()
+                # metrics.commit(loss=loss)
+
+                normalized_loss = loss / self.grad_accumulation_steps
+
+                if self.scaler.is_enabled():
+                    self.scaler.scale(normalized_loss).backward()
+                else:
+                    normalized_loss.backward()
+                
 
                 # === Compute Action Token Accuracy & L1 Loss ===
 
@@ -331,10 +366,19 @@ class TrainingStrategy(ABC):
                 )
                 action_l1_loss = torch.nn.functional.l1_loss(continuous_actions_pred, continuous_actions_gt)
 
-                # Commit Metrics
-                metrics.commit(action_accuracy=action_accuracy, l1_loss=action_l1_loss, update_step_time=True)
+                # Store recent train metrics
+                recent_losses.append(loss)
+                recent_action_accuracies.append(action_accuracy)
+                recent_l1_losses.append(action_l1_loss)
 
-                # Compute metrics per dataset --> only on rank_zero since we don't log them on other workers anyways
+                # Compute smoothened train metrics
+                #   =>> Equal to current step metrics when not using gradient accumulation
+                #   =>> Otherwise, equal to the average of metrics observed over micro-batches used for gradient accumulation
+                smoothened_loss = sum(recent_losses) / len(recent_losses)
+                smoothened_action_accuracy = sum(recent_action_accuracies) / len(recent_action_accuracies)
+                smoothened_l1_loss = sum(recent_l1_losses) / len(recent_l1_losses)
+
+                                # Compute metrics per dataset --> only on rank_zero since we don't log them on other workers anyways
                 if overwatch.is_rank_zero():
                     datasets = set(batch["dataset_names"])
                     if len(datasets) > 1:
@@ -359,34 +403,53 @@ class TrainingStrategy(ABC):
                             )
 
                 # === Gradient Step ===
+                if (batch_idx + 1) % self.grad_accumulation_steps == 0:
+                    # Commit Metrics
+                    metrics.commit(loss=smoothened_loss)
+                    metrics.commit(action_accuracy=smoothened_action_accuracy, l1_loss=smoothened_l1_loss, update_step_time=True)
 
-                # Clip Gradients --> this is custom, per-strategy because of DDP vs. FSDP locality assumptions
-                self.clip_grad_norm()
 
-                # Optimizer & LR Scheduler Step
-                self.optimizer.step()
-                self.lr_scheduler.step()
-                self.optimizer.zero_grad()
+                    # Clip Gradients --> this is custom, per-strategy because of DDP vs. FSDP locality assumptions
+                    # Optimizer Step
+                    if self.scaler.is_enabled():
+                        # reference: https://docs.pytorch.org/docs/stable/notes/amp_examples.html#gradient-clipping
+                        # unscale_() needed before clipping gradient and before optimizer step
+                        self.scaler.unscale_(self.optimizer)
+                        self.clip_grad_norm()
+                        self.scaler.step(self.optimizer)
+                        self.scaler.update()
+                    else:
+                        self.clip_grad_norm()
+                        self.optimizer.step()
 
-                # Compute epoch value using number of completed gradient steps
-                epoch = (metrics.global_step + 1) // (len(vla_dataset) // self.global_batch_size)
+                    # Zero Gradient & LR Scheduler Step
+                    self.lr_scheduler.step()
+                    self.optimizer.zero_grad()
 
-                # Push Metrics
-                metrics.commit(global_step=metrics.global_step + 1, epoch=epoch, lr=self.lr_scheduler.get_last_lr()[0])
-                status = metrics.push()
+                    # Compute epoch value using number of completed gradient steps
+                    epoch = (metrics.global_step + 1) // (len(vla_dataset) // self.global_batch_size)
 
-                # Check for Save Interval or Max Steps & Save Checkpoint
-                if (terminate := (self.max_steps is not None and metrics.global_step >= self.max_steps)) or (
-                    (metrics.global_step % save_interval) == 0
-                ):
-                    self.save_checkpoint(
-                        metrics.run_dir, metrics.global_step, epoch, loss.item(), only_trainable=not save_full_model
-                    )
-                    dist.barrier()
+                    # Push Metrics
+                    metrics.commit(global_step=metrics.global_step + 1, epoch=epoch, lr=self.lr_scheduler.get_last_lr()[0])
+                    status = metrics.push()
 
-                    if terminate:
-                        return
+                    # Check for Save Interval or Max Steps & Save Checkpoint
+                    if (terminate := (self.max_steps is not None and metrics.global_step >= self.max_steps)) or (
+                        (metrics.global_step % save_interval) == 0
+                    ):
+                        self.save_checkpoint(
+                            metrics.run_dir, metrics.global_step, epoch, loss.item(), only_trainable=not save_full_model
+                        )
+                        dist.barrier()
 
-                # Update Progress Bar
-                progress.update()
-                progress.set_description(status)
+                        if terminate:
+                            return
+
+                    # Update Progress Bar
+                    progress.update()
+                    progress.set_description(status)
+                
+            # Save checkpoint at end each epoch (if `self.max_steps` is None)
+            if self.max_steps is None:
+                self.save_checkpoint(metrics.run_dir, metrics.global_step, epoch, loss.item())
+                dist.barrier()
