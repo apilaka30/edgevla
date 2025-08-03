@@ -514,6 +514,8 @@ def make_interleaved_dataset(
     # Get the indices of the "primary" datasets (i.e., datasets with sample_weight == 1.0)
     primary_dataset_indices = np.array([idx for idx in range(len(sample_weights)) if sample_weights[idx] == 1.0])
 
+    dataset_sizes = np.array(dataset_sizes) * 0.7  # Scale dataset sizes according to scaling laws for model size
+
     # Balance and Normalize Weights
     if balance_weights:
         sample_weights = np.array(sample_weights) * np.array(dataset_sizes)
@@ -577,7 +579,7 @@ def make_interleaved_dataset(
 
     # [Contract] When training VLA Policies, we let the Collator handle Batching!
     if batch_size is not None:
-        dataset = dataset.batch(batch_size)
+        dataset = dataset.batch(batch_size).prefetch(4)
 
     # Note =>> Seems to reduce memory usage without affecting speed?
     dataset = dataset.with_ram_budget(1)

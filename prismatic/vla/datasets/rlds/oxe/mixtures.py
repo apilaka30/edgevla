@@ -11,15 +11,15 @@ from typing import Dict, List, Tuple
 OXE_NAMED_MIXTURES: Dict[str, List[Tuple[str, float]]] = {
     # === Bridge V2 Dataset ===
     "bridge": [
-        # ("bridge_oxe", 1.0),                                    # Version of Bridge V2 in Open-X GCP Bucket
-        ("bridge_orig", 1.0),                                   # Original Version of Bridge V2 from Project Website
+        ("bridge_oxe", 1.0),                                    # Version of Bridge V2 in Open-X GCP Bucket
+        # ("bridge_orig", 1.0),                                   # Original Version of Bridge V2 from Project Website
     ],
 
 
     # === [Moderate-Scale] Bridge++ Mixtures ===
     "bridge_rt_1": [
-        # ("bridge_oxe", 1.0)                                   # Version of Bridge V2 in Open-X GCP Bucket
-        ("bridge_orig", 1.0),                                   # Original Version of Bridge V2 from Project Website
+        ("bridge_oxe", 1.0),                                   # Version of Bridge V2 in Open-X GCP Bucket
+        # ("bridge_orig", 1.0),                                   # Original Version of Bridge V2 from Project Website
 
         ("fractal20220817_data", 1.0),                          # Google RT-1 Robot Data (Large-Scale)
     ],
@@ -28,11 +28,11 @@ OXE_NAMED_MIXTURES: Dict[str, List[Tuple[str, float]]] = {
     "rtx": [
         ("fractal20220817_data", 0.54087122203),                # Google RT-1 Robot Data (Large-Scale)
         ("kuka", 0.8341046294),
-        # ("bridge_oxe", 1.0)                                   # Version of Bridge V2 in Open-X GCP Bucket
-        ("bridge_orig", 1.0),                                   # Original Version of Bridge V2 from Project Website
+        ("bridge_oxe", 1.0),                                   # Version of Bridge V2 in Open-X GCP Bucket
+        # ("bridge_orig", 1.0),                                   # Original Version of Bridge V2 from Project Website
         ("taco_play", 2.0),
         ("jaco_play", 2.0),
-        ("berkeley_cable_routing", 3.0),
+        ("berkeley_cable_routing", 2.0),
         ("roboturk", 1.0),
         # ("nyu_door_opening_surprising_effectiveness", 5.0),   # Note --> only contains wrist camera images (skip?)
         ("viola", 2.0),
@@ -43,8 +43,8 @@ OXE_NAMED_MIXTURES: Dict[str, List[Tuple[str, float]]] = {
     "rtx_franka": [
         ("fractal20220817_data", 0.54087122203),                # Google RT-1 Robot Data (Large-Scale)
         ("kuka", 0.8341046294),
-        # ("bridge_oxe", 1.0)                                   # Version of Bridge V2 in Open-X GCP Bucket
-        ("bridge_orig", 1.0),                                   # Original Version of Bridge V2 from Project Website
+        ("bridge_oxe", 1.0),                                   # Version of Bridge V2 in Open-X GCP Bucket
+        # ("bridge_orig", 1.0),                                   # Original Version of Bridge V2 from Project Website
         ("taco_play", 2.0),
         ("jaco_play", 2.0),
         ("berkeley_cable_routing", 3.0),
@@ -197,11 +197,34 @@ OXE_NAMED_MIXTURES: Dict[str, List[Tuple[str, float]]] = {
     # CMU Stretch
     # NYU Franka Play - 1.5GB - A Franka robot performs various manipulation tasks.
     "tinyllama_mix": [
-        ("fractal20220817_data", 0.54087122203),
+        ("fractal20220817_data", 0.54087122203),                # Google RT-1 Robot Data (Large-Scale)
+        ("kuka", 0.8341046294),
+        ("bridge_oxe", 1.0),                                   # Original Version of Bridge V2 from Project Website
+        ("taco_play", 2.0),
+        ("jaco_play", 1.0),
+        ("berkeley_cable_routing", 1.0),
+        ("roboturk", 2.0),
+        ("viola", 2.0),
+        ("berkeley_autolab_ur5", 2.0),
+        ("toto", 1.0),
+        ("language_table", 0.1),
+        ("stanford_hydra_dataset_converted_externally_to_rlds", 2.0),
         ("austin_buds_dataset_converted_externally_to_rlds", 1.0),
         ("nyu_franka_play_dataset_converted_externally_to_rlds", 3.0),
+        ("furniture_bench_dataset_converted_externally_to_rlds", 0.1),
+        ("ucsd_kitchen_dataset_converted_externally_to_rlds", 2.0),
+        ("austin_sailor_dataset_converted_externally_to_rlds", 1.0),
+        ("austin_sirius_dataset_converted_externally_to_rlds", 1.0),
+        ("dlr_edan_shared_control_converted_externally_to_rlds", 1.0),
+        ("iamlab_cmu_pickup_insert_converted_externally_to_rlds", 1.0),
+        ("utaustin_mutex", 1.0),
         ("berkeley_fanuc_manipulation", 2.0),
         ("cmu_stretch", 1.0),
+        ## New Datasets in MagicSoup++
+        ("bc_z", 0.2),                                          # Note: use v0.1.0 --> later versions broken
+        ("fmb_dataset", 1.0),
+        ("dobbe", 0.2),
+        ("droid", 0.06),
     ],
 
     # === DROID Finetuning Datasets ===
