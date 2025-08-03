@@ -151,3 +151,9 @@ data/
 # Rollout videos and wandb logs
 rollouts/
 wandb/
+
+
+#Pruning analysis
+pruning-analysis/SLEB/
+pruning-analysis/robotics_samples/
+pruning-analysis/vqa_sample/

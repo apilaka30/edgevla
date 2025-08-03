@@ -1,0 +1,7 @@
+Current GPU: Tesla T4, # GPU: 1, Model Name: TinyLlama/TinyLlama-1.1B-Chat-v1.0, Infernce type : Token Generation, Dense Latency: 5699.68ms, SLEB 0.0 Latency: 5752.92ms, Speedup: x0.99
+Current GPU: Tesla T4, # GPU: 1, Model Name: TinyLlama/TinyLlama-1.1B-Chat-v1.0, Infernce type : Token Generation, Dense Latency: 5709.17ms, SLEB 0.05 Latency: 5241.19ms, Speedup: x1.09
+Current GPU: Tesla T4, # GPU: 1, Model Name: TinyLlama/TinyLlama-1.1B-Chat-v1.0, Infernce type : Token Generation, Dense Latency: 5709.85ms, SLEB 0.1 Latency: 4963.89ms, Speedup: x1.15
+Current GPU: Tesla T4, # GPU: 1, Model Name: TinyLlama/TinyLlama-1.1B-Chat-v1.0, Infernce type : Token Generation, Dense Latency: 5723.37ms, SLEB 0.15000000000000002 Latency: 4763.67ms, Speedup: x1.20
+Current GPU: Tesla T4, # GPU: 1, Model Name: TinyLlama/TinyLlama-1.1B-Chat-v1.0, Infernce type : Token Generation, Dense Latency: 5717.87ms, SLEB 0.2 Latency: 4491.94ms, Speedup: x1.27
+Current GPU: Tesla T4, # GPU: 1, Model Name: TinyLlama/TinyLlama-1.1B-Chat-v1.0, Infernce type : Token Generation, Dense Latency: 5699.00ms, SLEB 0.25 Latency: 4227.85ms, Speedup: x1.35
+Current GPU: Tesla T4, # GPU: 1, Model Name: TinyLlama/TinyLlama-1.1B-Chat-v1.0, Infernce type : Token Generation, Dense Latency: 5691.09ms, SLEB 0.30000000000000004 Latency: 3981.99ms, Speedup: x1.43

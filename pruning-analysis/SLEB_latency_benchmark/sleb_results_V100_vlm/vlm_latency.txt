@@ -1,0 +1,7 @@
+Current GPU: Tesla V100-PCIE-32GB, # GPU: 1, Model Name: EdgeVLA, Infernce type : Token Generation, Dense Latency: 2657.63ms, SLEB 0.0 Latency: 2657.63ms, Speedup: x1.00
+Current GPU: Tesla V100-PCIE-32GB, # GPU: 1, Model Name: EdgeVLA, Infernce type : Token Generation, Dense Latency: 2657.63ms, SLEB 0.05 Latency: 2433.30ms, Speedup: x1.09
+Current GPU: Tesla V100-PCIE-32GB, # GPU: 1, Model Name: EdgeVLA, Infernce type : Token Generation, Dense Latency: 2657.63ms, SLEB 0.1 Latency: 2331.36ms, Speedup: x1.14
+Current GPU: Tesla V100-PCIE-32GB, # GPU: 1, Model Name: EdgeVLA, Infernce type : Token Generation, Dense Latency: 2657.63ms, SLEB 0.15000000000000002 Latency: 2225.76ms, Speedup: x1.19
+Current GPU: Tesla V100-PCIE-32GB, # GPU: 1, Model Name: EdgeVLA, Infernce type : Token Generation, Dense Latency: 2657.63ms, SLEB 0.2 Latency: 2115.48ms, Speedup: x1.26
+Current GPU: Tesla V100-PCIE-32GB, # GPU: 1, Model Name: EdgeVLA, Infernce type : Token Generation, Dense Latency: 2657.63ms, SLEB 0.25 Latency: 2005.76ms, Speedup: x1.32
+Current GPU: Tesla V100-PCIE-32GB, # GPU: 1, Model Name: EdgeVLA, Infernce type : Token Generation, Dense Latency: 2657.63ms, SLEB 0.30000000000000004 Latency: 1901.69ms, Speedup: x1.40

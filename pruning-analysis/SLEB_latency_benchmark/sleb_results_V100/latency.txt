@@ -1,0 +1,7 @@
+Current GPU: Tesla V100-PCIE-32GB, # GPU: 1, Model Name: TinyLlama/TinyLlama-1.1B-Chat-v1.0, Infernce type : Token Generation, Dense Latency: 3064.08ms, SLEB 0.0 Latency: 3064.08ms, Speedup: x1.00
+Current GPU: Tesla V100-PCIE-32GB, # GPU: 1, Model Name: TinyLlama/TinyLlama-1.1B-Chat-v1.0, Infernce type : Token Generation, Dense Latency: 3064.08ms, SLEB 0.05 Latency: 2823.91ms, Speedup: x1.09
+Current GPU: Tesla V100-PCIE-32GB, # GPU: 1, Model Name: TinyLlama/TinyLlama-1.1B-Chat-v1.0, Infernce type : Token Generation, Dense Latency: 3064.08ms, SLEB 0.1 Latency: 2689.37ms, Speedup: x1.14
+Current GPU: Tesla V100-PCIE-32GB, # GPU: 1, Model Name: TinyLlama/TinyLlama-1.1B-Chat-v1.0, Infernce type : Token Generation, Dense Latency: 3064.08ms, SLEB 0.15000000000000002 Latency: 2572.99ms, Speedup: x1.19
+Current GPU: Tesla V100-PCIE-32GB, # GPU: 1, Model Name: TinyLlama/TinyLlama-1.1B-Chat-v1.0, Infernce type : Token Generation, Dense Latency: 3064.08ms, SLEB 0.2 Latency: 2561.73ms, Speedup: x1.20
+Current GPU: Tesla V100-PCIE-32GB, # GPU: 1, Model Name: TinyLlama/TinyLlama-1.1B-Chat-v1.0, Infernce type : Token Generation, Dense Latency: 3064.08ms, SLEB 0.25 Latency: 2297.57ms, Speedup: x1.33
+Current GPU: Tesla V100-PCIE-32GB, # GPU: 1, Model Name: TinyLlama/TinyLlama-1.1B-Chat-v1.0, Infernce type : Token Generation, Dense Latency: 3064.08ms, SLEB 0.30000000000000004 Latency: 2161.99ms, Speedup: x1.42
