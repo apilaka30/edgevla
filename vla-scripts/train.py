@@ -231,7 +231,6 @@ def train(cfg: TrainConfig) -> None:
         using_lora=cfg.using_lora,
         lora_rank=cfg.vla.lora_rank,
         lora_alpha=cfg.vla.lora_alpha,
-        mixed_precision_dtype=torch.float16 if cfg.vla.enable_mixed_precision_training else torch.float32, # hardcoded becaue V100 don't support bfloat16
     )
     train_strategy.run_setup(run_dir=run_dir, n_train_examples=len(vla_dataset))
     # Create Metrics =>> Handles on the fly tracking, logging to specified trackers (e.g., JSONL, Weights & Biases)
