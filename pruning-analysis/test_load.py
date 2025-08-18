@@ -1,4 +1,3 @@
-import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -6,33 +5,17 @@ from typing import Optional, Tuple, Union
 
 import draccus
 import torch
-import torch.distributed as dist
-import yaml
 from collections import OrderedDict
-from prismatic.models import load, load_vla
+from prismatic.models import load_vla
 from prismatic.overwatch import initialize_overwatch
-from prismatic.preprocessing import get_dataset_and_collator
-from prismatic.training import Metrics, get_train_strategy
-from prismatic.util import set_global_seed
 
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 from peft import PeftModel
 
 import torch
-import torch.distributed as dist
-from torch.utils.data import DataLoader, Dataset, DistributedSampler
-from tqdm import tqdm
-from transformers.modeling_outputs import CausalLMOutputWithPast
-
-from prismatic.models.vlms import PrismaticVLM
 from prismatic.overwatch import initialize_overwatch
-from prismatic.training.metrics import Metrics, VLAMetrics
-from prismatic.util import check_bloat16_supported
-from prismatic.util.batching_utils import SplitModalitySampler
-from prismatic.util.data_utils import PaddedCollatorForActionPrediction, PaddedCollatorForLanguageModeling
-from prismatic.vla.action_tokenizer import ActionTokenizer
 
 # Disable Tokenizers Parallelism to Play Nice w/ PyTorch Multiprocessing DataLoaders
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -87,16 +70,16 @@ class TrainConfig:
 def load_and_test(cfg: TrainConfig) -> None:
     hf_token = cfg.hf_token.read_text().strip() if isinstance(cfg.hf_token, Path) else os.environ[cfg.hf_token]
 
-    vlm = load_vla(Path("/home/apilaka/edgevla/checkpoints/vla/llava-lrv-openx/checkpoints/step-3000-epoch-00-loss=3.0724.pt"), hf_token=hf_token, load_for_training=True)
+    vlm = load_vla(Path("/home/apilaka/edgevla/checkpoints/vla/llava-lvis-lrv-openx/checkpoints/libero-object-finetuned2.pt"), hf_token=hf_token, load_for_training=True)
 
     # # [Explicit] Call to `freeze_backbones` here for clarity => will log exactly what is frozen / what's not!
     # overwatch.info(f"Invoking `VLM.freeze_backbones()` for `{model_id}` => Training Stage: `{cfg.stage}`")
-    vlm.freeze_backbones("vla-train")
+    vlm.freeze_backbones("vla-full-train")
 
     # Load Weights from Checkpoint (depends on stage, config)
-    overwatch.info(f"Loading LoRA Adapter Weights from /bigscratch/apilaka/vla/runs/edgevla+n1+b108+x7/lora-step-006000-epoch-00-loss=2.9216")
+    overwatch.info(f"Loading LoRA Adapter Weights from /bigscratch/apilaka/vla-ft/runs/edgevla+n1+b124+x7+loraTrue+lr0.0002+libero_object_no_noops--image_aug/lora-step-014000-epoch-36-loss=0.0098")
     # vlm = PrismaticVLM.from_pretrained(cfg.pretrained_checkpoint, cfg.model.model_id, vision_backbone=vision_backbone, llm_backbone=llm_backbone, arch_specifier=cfg.model.arch_specifier)
-    vlm = PeftModel.from_pretrained(vlm,  Path("/bigscratch/apilaka/vla/runs/edgevla+n1+b108+x7/lora-step-006000-epoch-00-loss=2.9216"))
+    vlm = PeftModel.from_pretrained(vlm,  Path("/bigscratch/apilaka/vla-ft/runs/edgevla+n1+b124+x7+loraTrue+lr0.0002+libero_object_no_noops--image_aug/lora-step-014000-epoch-36-loss=0.0098"))
     vlm = vlm.merge_and_unload()
     
     full_vlm_state_dict = vlm.state_dict()
@@ -110,8 +93,8 @@ def load_and_test(cfg: TrainConfig) -> None:
             if key.startswith(mprefix := f"{mkey}."):
                 model_state_dicts[mkey][key.removeprefix(mprefix)] = param
 
-    checkpoint_path = "/home/apilaka/edgevla/checkpoints/vla/llava-lrv-openx/checkpoints/step-6000-epoch-00-loss=2.9216.pt"
-    overwatch.info(f"Saving Converted VLA Checkpoint to /home/apilaka/edgevla/checkpoints/vla/llava-lrv-openx/checkpoints/step-6000-epoch-00-loss=2.9216.pt")
+    checkpoint_path = "/home/apilaka/edgevla/checkpoints/vla/llava-lvis-lrv-openx/checkpoints/libero-object-finetuned3.pt"
+    overwatch.info(f"Saving checkpoint at /home/apilaka/edgevla/checkpoints/vla/llava-lvis-lrv-openx/checkpoints/libero-object-finetuned3.pt")
     # Save Checkpoint & Copy Latest to `latest-checkpoint.pt`
     torch.save({"model": model_state_dicts}, checkpoint_path)
 
@@ -144,83 +127,83 @@ def load_and_test(cfg: TrainConfig) -> None:
     # run_evaluation(vlm, train_dataset, collator, metrics, cfg.global_batch_size, cfg.per_device_batch_size, worker_init_fn)
 
 
-def run_evaluation(
-        self,
-        vlm,
-        dataset: Dataset,
-        collator: PaddedCollatorForLanguageModeling,
-        metrics: Metrics,
-        global_batch_size: int,
-        per_device_batch_size: int,
-        worker_init_fn,
-        batch_construction_strategy: str = "split-modality",
-        seed: int = 7,
-    ) -> None:
-        """Run the evaluation loop for the given `dataset` and `collator`; log results to `metrics`"""
+# def run_evaluation(
+#         self,
+#         vlm,
+#         dataset: Dataset,
+#         collator: PaddedCollatorForLanguageModeling,
+#         metrics: Metrics,
+#         global_batch_size: int,
+#         per_device_batch_size: int,
+#         worker_init_fn,
+#         batch_construction_strategy: str = "split-modality",
+#         seed: int = 7,
+#     ) -> None:
+#         """Run the evaluation loop for the given `dataset` and `collator`; log results to `metrics`"""
         
-        # Use the same sampler as in training but without shuffling
-        if batch_construction_strategy == "split-modality":
-            modality_lengths = dataset.get_modality_lengths()
-            sampler = SplitModalitySampler(
-                dataset,
-                modality_lengths,
-                global_batch_size=global_batch_size,
-                num_replicas=overwatch.world_size(),
-                rank=overwatch.rank(),
-                seed=seed,
-                drop_last=False,
-            )
-        else:
-            sampler = DistributedSampler(
-                dataset,
-                num_replicas=overwatch.world_size(),
-                rank=overwatch.rank(),
-                shuffle=False,  # No shuffling for evaluation
-                seed=seed,
-                drop_last=False,
-            )
+#         # Use the same sampler as in training but without shuffling
+#         if batch_construction_strategy == "split-modality":
+#             modality_lengths = dataset.get_modality_lengths()
+#             sampler = SplitModalitySampler(
+#                 dataset,
+#                 modality_lengths,
+#                 global_batch_size=global_batch_size,
+#                 num_replicas=overwatch.world_size(),
+#                 rank=overwatch.rank(),
+#                 seed=seed,
+#                 drop_last=False,
+#             )
+#         else:
+#             sampler = DistributedSampler(
+#                 dataset,
+#                 num_replicas=overwatch.world_size(),
+#                 rank=overwatch.rank(),
+#                 shuffle=False,  # No shuffling for evaluation
+#                 seed=seed,
+#                 drop_last=False,
+#             )
 
-        dataloader = DataLoader(
-            dataset,
-            batch_size=per_device_batch_size,
-            sampler=sampler,
-            collate_fn=collator,
-            num_workers=2,
-            worker_init_fn=worker_init_fn,
-        )
+#         dataloader = DataLoader(
+#             dataset,
+#             batch_size=per_device_batch_size,
+#             sampler=sampler,
+#             collate_fn=collator,
+#             num_workers=2,
+#             worker_init_fn=worker_init_fn,
+#         )
 
-        # === Evaluate ===
-        vlm.eval()
-        status = metrics.get_status()
-        with torch.no_grad():  # Ensure no gradients are computed
-            with tqdm(
-                total=len(dataloader),
-                desc=status,
-                leave=False,
-                disable=not overwatch.is_rank_zero(),
-            ) as progress:
-                for eval_idx, batch in enumerate(dataloader):
-                    with torch.autocast(
-                        "cuda",
-                        dtype=torch.bfloat16,
-                        enabled=True,
-                    ):
-                        output: CausalLMOutputWithPast = vlm(
-                            input_ids=batch["input_ids"],
-                            attention_mask=batch["attention_mask"],
-                            pixel_values=batch["pixel_values"],
-                            labels=batch["labels"],
-                            multimodal_indices=batch["multimodal_indices"],
-                        )
-                        loss = output.loss
+#         # === Evaluate ===
+#         vlm.eval()
+#         status = metrics.get_status()
+#         with torch.no_grad():  # Ensure no gradients are computed
+#             with tqdm(
+#                 total=len(dataloader),
+#                 desc=status,
+#                 leave=False,
+#                 disable=not overwatch.is_rank_zero(),
+#             ) as progress:
+#                 for eval_idx, batch in enumerate(dataloader):
+#                     with torch.autocast(
+#                         "cuda",
+#                         dtype=torch.bfloat16,
+#                         enabled=True,
+#                     ):
+#                         output: CausalLMOutputWithPast = vlm(
+#                             input_ids=batch["input_ids"],
+#                             attention_mask=batch["attention_mask"],
+#                             pixel_values=batch["pixel_values"],
+#                             labels=batch["labels"],
+#                             multimodal_indices=batch["multimodal_indices"],
+#                         )
+#                         loss = output.loss
 
-                    # Commit Evaluation Metrics
-                    metrics.commit(loss=loss)
-                    progress.update()
-                    progress.set_description(status)
+#                     # Commit Evaluation Metrics
+#                     metrics.commit(loss=loss)
+#                     progress.update()
+#                     progress.set_description(status)
                 
-                # Push final status
-                metrics.push()
+#                 # Push final status
+#                 metrics.push()
 
 
 if __name__ == "__main__":

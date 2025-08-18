@@ -1,3 +1,7 @@
+# ==============================================================================
+# Visualize and Save Samples from TFRecord
+# ==============================================================================
+
 import tensorflow as tf
 from PIL import Image
 import os
@@ -66,17 +70,17 @@ with open(instr_path, "w") as f:
 
 print(f"✅ Saved {sample_count} samples in {SAVE_DIR}")
 
+# ==============================================================================
+# Visualize TFRecord Key Structure
+# ==============================================================================
+
+
 # # 🧩 Setup
 # import tensorflow as tf
-# import numpy as np
-# import matplotlib.pyplot as plt
-# import cv2
-# import io
-# import json
 # from PIL import Image
 
 # # ✅ Change this path to your local .tfrecord file
-# TFRECORD_PATH = "/bigscratch/apilaka/rlds_datasets/open_x_embodiment/taco_play/0.1.0/taco_play-test.tfrecord-00092-of-00128"
+# TFRECORD_PATH = "/bigscratch/apilaka/rlds_datasets/open_x_embodiment/libero_object_no_noops/1.0.0/libero_object-train.tfrecord-00001-of-00032"
 
 # # Utility: Decode byte string to dict if needed
 # def try_decode_bytes(value):
@@ -98,3 +102,53 @@ print(f"✅ Saved {sample_count} samples in {SAVE_DIR}")
 
 # # 🧠 View available keys (top-level feature dict)
 # print("Available keys:", list(parsed_example.features.feature.keys()))
+
+
+
+# ==============================================================================
+# Example of parsing TFRecord as SequenceExample or Example
+# ==============================================================================
+
+# import tensorflow as tf
+
+# tfrecord_path = "/bigscratch/apilaka/rlds_datasets/open_x_embodiment/libero_object_no_noops/1.0.0/libero_object-train.tfrecord-00000-of-00032"
+# dataset = tf.data.TFRecordDataset([tfrecord_path])
+
+# raw = next(iter(dataset))
+
+# # Try parsing as SequenceExample
+# seq_ex = tf.train.SequenceExample()
+# try:
+#     seq_ex.ParseFromString(raw.numpy())
+#     if seq_ex.feature_lists.feature_list:
+#         print("=== Parsed as SequenceExample ===")
+#         for key, fl in seq_ex.feature_lists.feature_list.items():
+#             first = fl.feature[0]
+#             if first.HasField("float_list"):
+#                 print(f"{key}: float dim = {len(first.float_list.value)}")
+#             elif first.HasField("bytes_list"):
+#                 print(f"{key}: bytes len = {len(first.bytes_list.value[0])}")
+#             elif first.HasField("int64_list"):
+#                 print(f"{key}: int64 len = {len(first.int64_list.value)}")
+#     else:
+#         print("No feature_lists found.")
+# except Exception as e:
+#     print("Failed parsing as SequenceExample:", e)
+
+# # Try parsing as Example
+# ex = tf.train.Example()
+# try:
+#     ex.ParseFromString(raw.numpy())
+#     if ex.features.feature:
+#         print("\n=== Parsed as Example ===")
+#         for key, f in ex.features.feature.items():
+#             if f.HasField("float_list"):
+#                 print(f"{key}: float dim = {len(f.float_list.value)}")
+#             elif f.HasField("bytes_list"):
+#                 print(f"{key}: bytes len = {len(f.bytes_list.value[0])}")
+#             elif f.HasField("int64_list"):
+#                 print(f"{key}: int64 dim = {len(f.int64_list.value)}")
+#     else:
+#         print("No features found.")
+# except Exception as e:
+#     print("Failed parsing as Example:", e)

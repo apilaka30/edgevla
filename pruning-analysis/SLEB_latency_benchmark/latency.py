@@ -126,9 +126,11 @@ if __name__ == '__main__':
 
         dlat = dense_latency if dlat is None else dlat
 
+    num_removal = np.ceil(22 * prune_ratios)
+    ratio_removal = num_removal.astype(np.float32) / 22
 
     plt.figure(figsize=(6,4))
-    plt.plot(prune_ratios, speedups, marker="o")
+    plt.plot(ratio_removal, speedups, marker="o")
     plt.xlabel("% Blocks Pruned")
     plt.ylabel("Avg Inference Speedup (X)")
     plt.title("EdgeVLA SLEB Depth-Pruning Ratio vs Inference Speedup")
@@ -138,7 +140,7 @@ if __name__ == '__main__':
 
 
     plt.figure(figsize=(6,4))
-    plt.plot(prune_ratios, sleb_latencies, marker="o")
+    plt.plot(ratio_removal, sleb_latencies, marker="o")
     plt.xlabel("% Blocks Pruned")
     plt.ylabel("Avg Inference Latency (ms)")
     plt.title("EdgeVLA SLEB Depth-Pruning Ratio vs. Generation Latency")
