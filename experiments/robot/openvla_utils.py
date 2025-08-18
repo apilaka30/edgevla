@@ -32,7 +32,8 @@ def get_vla(cfg):
     """Loads and returns a VLA model from checkpoint."""
     # Load VLA checkpoint.
     print("[*] Instantiating Pretrained VLA model")
-    print("[*] Loading in BF16 with Flash-Attention Enabled")
+    # print("[*] Loading in BF16 with Flash-Attention Enabled")
+    print("[*] Loading in FP32 w/o Flash-Attention Enabled")
 
     # Register OpenVLA model to HF Auto Classes (not needed if the model is on HF Hub)
     AutoConfig.register("openvla", OpenVLAConfig)
@@ -42,13 +43,15 @@ def get_vla(cfg):
 
     vla = AutoModelForVision2Seq.from_pretrained(
         cfg.pretrained_checkpoint,
-        attn_implementation="flash_attention_2",
-        torch_dtype=torch.bfloat16,
+        # attn_implementation="flash_attention_2",
+        torch_dtype=torch.float32,
+        ignore_mismatched_sizes=True,
         load_in_8bit=cfg.load_in_8bit,
         load_in_4bit=cfg.load_in_4bit,
-        low_cpu_mem_usage=True,
+        low_cpu_mem_usage=False,
         trust_remote_code=True,
     )
+    vla.resize_token_embeddings(32064)
 
     # Move model to device.
     # Note: `.to()` is not supported for 8-bit or 4-bit bitsandbytes models, but the model will
@@ -163,7 +166,7 @@ def get_vla_action(vla, processor, base_vla_name, obs, task_label, unnorm_key, c
         prompt = f"In: What action should the robot take to {task_label.lower()}?\nOut:"
 
     # Process inputs.
-    inputs = processor(prompt, image).to(DEVICE, dtype=torch.bfloat16)
+    inputs = processor(prompt, image).to(DEVICE, dtype=torch.float32)
 
     # Get action.
     action = vla.predict_action(**inputs, unnorm_key=unnorm_key, do_sample=False)

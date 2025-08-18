@@ -29,7 +29,7 @@ from huggingface_hub import hf_hub_download
 from timm.models.vision_transformer import LayerScale
 from transformers import AutoTokenizer
 
-from prismatic.conf import ModelConfig
+from prismatic.conf import ModelConfig, ModelRegistry
 from prismatic.extern.hf.configuration_prismatic import OpenVLAConfig
 from prismatic.extern.hf.modeling_prismatic import OpenVLAForActionPrediction
 from prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, PrismaticProcessor
@@ -39,12 +39,12 @@ from prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, Pr
 class HFConvertConfig:
     # fmt: off
     openvla_model_path_or_id: Union[str, Path] = (                      # Path to Pretrained VLA (on disk or HF Hub)
-        "/home/amey/robot_learning/openvla/runs/tinyllama-dinosiglip-224px+mx-tinyllama_mix+n0+b50+x7"
+        "/home/apilaka/edgevla/checkpoints/vla/llava-lvis-lrv-openx"  # Example Path
     )
     output_hf_model_local_path: Path = Path(                            # Path to Local Path to save HF model
-        "/home/amey/robot_learning/openvla/runs/tinyllama-dinosiglip-224px+mx-tinyllama_mix+n0+b50+x7/hf_checkpoints"
+        "/home/apilaka/edgevla/checkpoints/vla/llava-lvis-lrv-openx/hf_checkpoints"
     )
-    output_hf_model_hub_path: str = "openvla/openvla-7b"                # (Optional) Path to HF Hub Path to push
+    output_hf_model_hub_path: str = None               # (Optional) Path to HF Hub Path to push
                                                                         # model to
 
     # HF Hub Credentials (required for Gated Models like LLaMa-2)
@@ -118,7 +118,7 @@ def remap_state_dicts_for_hf(
 @draccus.wrap()
 def convert_openvla_weights_to_hf(cfg: HFConvertConfig) -> None:
     print(f"[*] Converting OpenVLA Model `{cfg.openvla_model_path_or_id}` to HF Transformers Format")
-    torch.set_default_dtype(torch.bfloat16)
+    torch.set_default_dtype(torch.float32)
 
     # Get `config.json`, 'dataset_statistics.json' and `checkpoint_pt` -- mirrors logic in `prismatic.models.load.py`
     if os.path.isdir(cfg.openvla_model_path_or_id):
@@ -142,7 +142,7 @@ def convert_openvla_weights_to_hf(cfg: HFConvertConfig) -> None:
     # Load "Native" Config JSON =>> Create LLM Config & Instantiate Tokenizer
     with open(config_json, "r") as f:
         vla_cfg = json.load(f)["vla"]
-        prismatic_config = ModelConfig.get_choice_class(vla_cfg["base_vlm"])().__dict__
+        prismatic_config = ModelConfig.get_choice_class(ModelRegistry.EXT_EXP_LLAMA2_CHAT_1B.model_id)().__dict__ #ModelConfig.get_choice_class(vla_cfg["base_vlm"])().__dict__
 
     # Load Normalization Statistics
     with open(dataset_statistics_json, "r") as f:
@@ -155,7 +155,7 @@ def convert_openvla_weights_to_hf(cfg: HFConvertConfig) -> None:
         arch_specifier=prismatic_config["arch_specifier"],
         image_resize_strategy=prismatic_config["image_resize_strategy"],
         llm_max_length=prismatic_config["llm_max_length"],
-        torch_dtype=torch.bfloat16, 
+        torch_dtype=torch.float32,
         norm_stats=norm_stats,
         use_fused_vision_backbone=True,
     )
@@ -174,7 +174,7 @@ def convert_openvla_weights_to_hf(cfg: HFConvertConfig) -> None:
     # Patch LLM Config in `hf_config` with vocab_size (+ `hf_config.pad_to_multiple_of`), pad_token_id + validate
     hf_config.text_config.vocab_size += hf_config.pad_to_multiple_of
     hf_config.text_config.pad_token_id = hf_config.pad_token_id
-    hf_config.text_config.torch_dtype = torch.bfloat16
+    hf_config.text_config.torch_dtype = torch.float32
     assert hf_config.text_config.use_cache, "LLM config `use_cache` should be True for inference (set default)!"
 
     # Create Vision Backbone & Transform =>> following `prismatic.models.materialize.get_vision_backbone_and_transform`
@@ -237,7 +237,7 @@ def convert_openvla_weights_to_hf(cfg: HFConvertConfig) -> None:
     hf_model.load_state_dict(converted_state_dict, strict=True, assign=True)
 
     # Cast Model to BF16 before Saving
-    hf_model.to(torch.bfloat16)
+    hf_model.to(torch.float32)
 
     # Save Pretrained Versions to Local Path
     print("[*] Saving Model & Processor to Local Path")

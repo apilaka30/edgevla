@@ -30,7 +30,6 @@ def benchmark_model(model, image: Image, instruction: str, processor=None, n_tri
         if processor is not None: # can eventually be only predict_action() once edgevla is trained
             inputs = processor(instruction, image).to(device, dtype=torch.float16)
             a = model.predict_action(**inputs, do_sample=False)
-            print(f"OpenVLA action prediction output: {a}")
         else:
             _ = model.generate(image=image, prompt_text=instruction)
 
@@ -44,7 +43,7 @@ def benchmark_model(model, image: Image, instruction: str, processor=None, n_tri
             ender.record()
         else:
             starter.record()
-            _ = model.generate(image=image, prompt_text=instruction)
+            _ = model.generate(image=image, prompt_text=instruction, min_new_tokens=7, max_new_tokens=7)
             ender.record()
         torch.cuda.synchronize()
         timings[it] = starter.elapsed_time(ender)

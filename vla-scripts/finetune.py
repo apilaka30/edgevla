@@ -75,22 +75,22 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 @dataclass
 class FinetuneConfig:
     # fmt: off
-    vla_path: str = "/home/amey/robot_learning/openvla/runs/tinyllama-dinosiglip-224px+mx-tinyllama_mix+n0+b50+x7/hf_checkpoints"                            # Path to OpenVLA model (on HuggingFace Hub)
+    vla_path: str = "/home/apilaka/edgevla/checkpoints/vla/llava-lvis-lrv-openx/hf_checkpoints"#checkpoints/step-042000-epoch-18-loss=1.2753.pt"                            # Path to OpenVLA model (on HuggingFace Hub)
 
     # Directory Paths
-    data_root_dir: Path = Path("/home/amey/robot_learning/openvla/modified_libero_rlds")        # Path to Open-X dataset directory
-    dataset_name: str = "libero_spatial_no_noops"                                # Name of fine-tuning dataset (e.g., `droid_wipe`)
-    run_root_dir: Path = Path("runs")                               # Path to directory to store logs & checkpoints
+    data_root_dir: Path = Path("/bigscratch/apilaka/rlds_datasets/open_x_embodiment")        # Path to Open-X dataset directory
+    dataset_name: str = "libero_object_no_noops"                                # Name of fine-tuning dataset (e.g., `droid_wipe`)
+    run_root_dir: Path = Path("/bigscratch/apilaka/vla-ft/runs")                               # Path to directory to store logs & checkpoints
     adapter_tmp_dir: Path = Path("adapter-tmp")                     # Temporary directory for LoRA weights before fusing
 
     # Fine-tuning Parameters
-    batch_size: int = 8                                            # Fine-tuning batch size
-    max_steps: int = 10_000                                        # Max number of fine-tuning steps
+    batch_size: int = 16                                            # Fine-tuning batch size
+    max_steps: int = 100_000                                        # Max number of fine-tuning steps
     save_steps: int = 2500                                          # Interval for checkpoint saving
-    learning_rate: float = 3e-4                                     # Fine-tuning learning rate
-    grad_accumulation_steps: int = 2                                # Gradient accumulation steps
+    learning_rate: float = 5e-4                                     # Fine-tuning learning rate
+    grad_accumulation_steps: int = 8                                # Gradient accumulation steps
     image_aug: bool = True                                          # Whether to train with image augmentations
-    shuffle_buffer_size: int = 100_000                              # Dataloader shuffle buffer size (can reduce if OOM)
+    shuffle_buffer_size: int = 30_000                              # Dataloader shuffle buffer size (can reduce if OOM)
     save_latest_checkpoint_only: bool = True                        # Whether to save only one checkpoint per run and
                                                                     #   continually overwrite the latest checkpoint
                                                                     #   (If False, saves all checkpoints)
@@ -122,7 +122,7 @@ def finetune(cfg: FinetuneConfig) -> None:
 
     # Configure Unique Experiment ID & Log Directory
     exp_id = (
-        f"{cfg.vla_path.split('/')[-1]}+{cfg.dataset_name}"
+        f"edgevla+{cfg.dataset_name}"
         f"+b{cfg.batch_size * cfg.grad_accumulation_steps}"
         f"+lr-{cfg.learning_rate}"
     )
@@ -144,7 +144,7 @@ def finetune(cfg: FinetuneConfig) -> None:
     if cfg.use_quantization:
         assert cfg.use_lora, "Quantized training only supported for LoRA fine-tuning!"
         quantization_config = BitsAndBytesConfig(
-            load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_quant_type="nf4"
+            load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16, bnb_4bit_quant_type="nf4"
         )
 
     # Register OpenVLA model to HF Auto Classes (not needed if the model is on HF Hub)
@@ -157,13 +157,13 @@ def finetune(cfg: FinetuneConfig) -> None:
     processor = AutoProcessor.from_pretrained(cfg.vla_path, trust_remote_code=True)
     vla = AutoModelForVision2Seq.from_pretrained(
         cfg.vla_path,
-        torch_dtype=torch.bfloat16,
+        torch_dtype=torch.float16,
         ignore_mismatched_sizes=True,
         quantization_config=quantization_config,
         low_cpu_mem_usage=False,
         trust_remote_code=True,
     )
-    vla.resize_token_embeddings(32000)
+    vla.resize_token_embeddings(32064)
 
     # Device Placement =>> note that BitsAndBytes automatically handles for quantized training
     if cfg.use_quantization:
@@ -259,11 +259,11 @@ def finetune(cfg: FinetuneConfig) -> None:
         vla.train()
         optimizer.zero_grad()
         for batch_idx, batch in enumerate(dataloader):
-            with torch.autocast("cuda", dtype=torch.bfloat16):
+            with torch.autocast("cuda", dtype=torch.float16):
                 output: CausalLMOutputWithPast = vla(
                     input_ids=batch["input_ids"].to(device_id),
                     attention_mask=batch["attention_mask"].to(device_id),
-                    pixel_values=batch["pixel_values"].to(torch.bfloat16).to(device_id),
+                    pixel_values=batch["pixel_values"].to(torch.float16).to(device_id),
                     labels=batch["labels"],
                 )
                 loss = output.loss
@@ -344,7 +344,7 @@ def finetune(cfg: FinetuneConfig) -> None:
                 #   =>> Note that merging is slow and can be done post-hoc to speed up training
                 if cfg.use_lora:
                     base_vla = AutoModelForVision2Seq.from_pretrained(
-                        cfg.vla_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, trust_remote_code=True
+                        cfg.vla_path, torch_dtype=torch.float16, low_cpu_mem_usage=True, trust_remote_code=True
                     )
                     merged_vla = PeftModel.from_pretrained(base_vla, adapter_dir)
                     merged_vla = merged_vla.merge_and_unload()
