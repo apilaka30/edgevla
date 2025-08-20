@@ -29,7 +29,7 @@ from huggingface_hub import hf_hub_download
 from timm.models.vision_transformer import LayerScale
 from transformers import AutoTokenizer
 
-from prismatic.conf import ModelConfig
+from prismatic.conf import ModelConfig, ModelRegistry
 from prismatic.extern.hf.configuration_prismatic import OpenVLAConfig
 from prismatic.extern.hf.modeling_prismatic import OpenVLAForActionPrediction
 from prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, PrismaticProcessor
@@ -39,12 +39,12 @@ from prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, Pr
 class HFConvertConfig:
     # fmt: off
     openvla_model_path_or_id: Union[str, Path] = (                      # Path to Pretrained VLA (on disk or HF Hub)
-        "/home/amey/robot_learning/openvla/runs/tinyllama-dinosiglip-224px+mx-tinyllama_mix+n0+b50+x7"
+        "/home/apilaka/edgevla/checkpoints/vla/llava-lvis-lrv-openx"
     )
     output_hf_model_local_path: Path = Path(                            # Path to Local Path to save HF model
-        "/home/amey/robot_learning/openvla/runs/tinyllama-dinosiglip-224px+mx-tinyllama_mix+n0+b50+x7/hf_checkpoints"
+        "/home/apilaka/edgevla/checkpoints/vla/llava-lvis-lrv-openx/hf_checkpoints"
     )
-    output_hf_model_hub_path: str = "openvla/openvla-7b"                # (Optional) Path to HF Hub Path to push
+    output_hf_model_hub_path: str = ""                # (Optional) Path to HF Hub Path to push
                                                                         # model to
 
     # HF Hub Credentials (required for Gated Models like LLaMa-2)
@@ -142,7 +142,8 @@ def convert_openvla_weights_to_hf(cfg: HFConvertConfig) -> None:
     # Load "Native" Config JSON =>> Create LLM Config & Instantiate Tokenizer
     with open(config_json, "r") as f:
         vla_cfg = json.load(f)["vla"]
-        prismatic_config = ModelConfig.get_choice_class(vla_cfg["base_vlm"])().__dict__
+        # prismatic_config = ModelConfig.get_choice_class(vla_cfg["base_vlm"])().__dict__
+        prismatic_config = ModelConfig.get_choice_class(ModelRegistry.EXT_EXP_LLAMA2_CHAT_1B.model_id)().__dict__
 
     # Load Normalization Statistics
     with open(dataset_statistics_json, "r") as f:
@@ -157,7 +158,7 @@ def convert_openvla_weights_to_hf(cfg: HFConvertConfig) -> None:
         llm_max_length=prismatic_config["llm_max_length"],
         torch_dtype=torch.bfloat16, 
         norm_stats=norm_stats,
-        use_fused_vision_backbone=True,
+        use_fused_vision_backbone=True
     )
 
     # Instantiate & Add Pad to Tokenizer =>> following `prismatic.models.materialize.get_llm_backbone_and_tokenizer`

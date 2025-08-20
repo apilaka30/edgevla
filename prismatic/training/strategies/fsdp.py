@@ -13,7 +13,7 @@ from typing import Callable, Optional
 
 import torch
 import torch.distributed as dist
-from torch.amp import GradScaler
+from torch.cuda.amp import GradScaler
 import torch.nn as nn
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
     CheckpointImpl,
@@ -255,9 +255,9 @@ class FSDPStrategy(TrainingStrategy):
                                                             # For connecting DINOv2 vision backbone
                     "mm_projector",                         # Vision-to-language projection
                 ],
-                lora_dropout=0.05,        # Small dropout for regularization
-                bias="none",              # No bias adaptation to save parameters
-                task_type="CAUSAL_LM",     # Since TinyLlama is causal
+                lora_dropout=0.0,        # Small dropout for regularization
+                # bias="none",              # No bias adaptation to save parameters
+                # task_type="CAUSAL_LM",     # Since TinyLlama is causal
                 init_lora_weights="gaussian",  # Initialize LoRA weights with Gaussian distribution
                 # corda_config=corda_config
             )
@@ -354,7 +354,6 @@ class FSDPStrategy(TrainingStrategy):
             raise ValueError(f"Learning Rate Schedule with type `{self.lr_scheduler_type}` is not supported!")
         
         self.scaler = GradScaler(
-            device="cuda", 
             enabled=self.enable_mixed_precision_training and self.mixed_precision_dtype == torch.float16, 
             init_scale=2**10,
             )

@@ -42,6 +42,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # Initialize Overwatch =>> Wraps `logging.Logger`
 overwatch = initialize_overwatch(__name__)
 
+LIBERO_FT = True
 
 @dataclass
 class TrainConfig:
@@ -56,22 +57,20 @@ class TrainConfig:
     # )
     
     # Directory Paths
-    data_root_dir: Path = Path(                                     # Path to Open-X dataset directory
-        "/bigscratch/apilaka/rlds_datasets/open_x_embodiment"
-    )
-    run_root_dir: Path = Path("/bigscratch/apilaka/vla/runs")                               # Path to directory to store logs & checkpoints
+    data_root_dir: Path = Path("/home/apilaka/tensorflow_datasets") if LIBERO_FT else Path("/home/apilaka/rlds_datasets/open_x_embodiment")
+    run_root_dir: Path = Path("/home/apilaka/vla/runs")                               # Path to directory to store logs & checkpoints
 
     # Resume Run Parameters
-    pretrained_checkpoint: Optional[Path] = Path("/bigscratch/apilaka/vla/runs/edgevla+n1+b2108+x7+loraFalse+lr3e-06+bridge_rt_1--image_aug/checkpoints/step-004000-epoch-05-loss=3.2864.pt")#Path("/bigscratch/apilaka/vla/runs/edgevla+n1+b128+x7+loraFalse+lr3e-06--image_aug/checkpoints/step-022500-epoch-00-loss=2.4178.pt")#Path("/home/apilaka/edgevla/checkpoints/vla/llava-lrv-openx/checkpoints/step-6000-epoch-00-loss=2.9216.pt")                    # Absolute Path to Checkpoint
-    is_resume: bool = True                                          # Whether we are continuing a prior training run
+    pretrained_checkpoint: Optional[Path] = Path("/home/apilaka/edgevla/checkpoints/vla/llava-lvis-lrv-openx/checkpoints/step-064000-epoch-15-loss=1.1872.pt")
+    is_resume: bool = not LIBERO_FT                                          # Whether we are continuing a prior training run
                                                                     #   (only applicable given pretrained checkpoint)
-    resume_step: Optional[int] = 4000#6000                               # Global Step to Resume (should match checkpoint)
-    resume_epoch: Optional[int] = 5                              # Epoch to Resume (should match checkpoint)
+    resume_step: Optional[int] = 0 if LIBERO_FT else 64_000                              # Global Step to Resume (should match checkpoint)
+    resume_epoch: Optional[int] = 0 if LIBERO_FT else 15                              # Epoch to Resume (should match checkpoint)
 
     # Run Arguments
     run_id: Optional[str] = None                                    # Run ID for logging, Weights & Biases
     run_id_note: Optional[str] = None                               # Extra note for logging, Weights & Biases
-    save_interval: int = 1000                                       # Interval for saving checkpoints (in steps)
+    save_interval: int = 5000 if LIBERO_FT else 2000                                     # Interval for saving checkpoints (in steps)
     image_aug: bool = True                                         # Whether to enable image augmentations
     seed: int = 7                                                   # Random seed (for reproducibility)
 
@@ -82,7 +81,7 @@ class TrainConfig:
     trackers: Tuple[str, ...] = ("jsonl",)                  # Trackers to initialize (if W&B, add config!)
     wandb_project: str = "openvla"                                  # Name of W&B project to log to (use default!)
     wandb_entity: str = "stanford-voltron"                          # Name of entity to log under
-    using_lora:Optional[bool] = False  
+    using_lora:Optional[bool] = LIBERO_FT  
 
     def __post_init__(self) -> None:
         """Lift optimization parameters from `self.vla` for ease of use =>> validate on `expected_world_size`"""

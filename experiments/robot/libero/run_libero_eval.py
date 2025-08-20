@@ -59,18 +59,18 @@ class GenerateConfig:
     # Model-specific parameters
     #################################################################################################################
     model_family: str = "openvla"                    # Model family
-    pretrained_checkpoint: Union[str, Path] = ""     # Pretrained checkpoint path
+    pretrained_checkpoint: Union[str, Path] = "/home/apilaka/edgevla/checkpoints/vla/llava-lvis-lrv-openx/hf_checkpoints"     # Pretrained checkpoint path
     load_in_8bit: bool = False                       # (For OpenVLA only) Load with 8-bit quantization
     load_in_4bit: bool = False                       # (For OpenVLA only) Load with 4-bit quantization
 
-    center_crop: bool = True                         # Center crop? (if trained w/ random crop image aug)
+    center_crop: bool = False                         # Center crop? (if trained w/ random crop image aug)
 
     #################################################################################################################
     # LIBERO environment-specific parameters
     #################################################################################################################
-    task_suite_name: str = "libero_spatial"          # Task suite. Options: libero_spatial, libero_object, libero_goal, libero_10, libero_90
+    task_suite_name: str = "libero_object"          # Task suite. Options: libero_spatial, libero_object, libero_goal, libero_10, libero_90
     num_steps_wait: int = 10                         # Number of steps to wait for objects to stabilize in sim
-    num_trials_per_task: int = 50                    # Number of rollouts per task
+    num_trials_per_task: int = 1                    # Number of rollouts per task
 
     #################################################################################################################
     # Utils
@@ -85,6 +85,7 @@ class GenerateConfig:
     seed: int = 7                                    # Random Seed (for reproducibility)
     aug_period: int = 1
     use_augmentation: bool = False
+    sanity_check: bool = True
 
     # fmt: on
 
@@ -130,6 +131,87 @@ def add_speckle_noise(image, mean=0, var=0.10):
 
 IMG_AUGS = [add_gaussian_noise, add_salt_and_pepper_noise, add_speckle_noise]
 
+
+# ============================================================================================
+# RLDS LIBERO Demo stepping (sanity check #1)
+# ============================================================================================
+import tensorflow as tf
+import re
+
+def _parse_example_flat(raw):
+    """Parse one LIBERO Example (flattened per-episode). Returns (meta, steps_dict)."""
+    ex = tf.train.Example()
+    ex.ParseFromString(raw.numpy())
+    f = ex.features.feature
+
+    num_steps = len(f["steps/is_first"].int64_list.value)
+
+    def reshape_float(key, dim):
+        arr = np.array(f[key].float_list.value, dtype=np.float32)
+        return arr.reshape(num_steps, dim)
+
+    # episode-level fields (strings)
+    instruction = ""
+    if "steps/language_instruction" in f and f["steps/language_instruction"].bytes_list.value:
+        instruction = f["steps/language_instruction"].bytes_list.value[0].decode("utf-8")
+
+    file_path = ""
+    if "episode_metadata/file_path" in f and f["episode_metadata/file_path"].bytes_list.value:
+        file_path = f["episode_metadata/file_path"].bytes_list.value[0].decode("utf-8")
+
+    meta = {
+        "num_steps": num_steps,
+        "instruction": instruction,
+        "file_path": file_path,
+    }
+
+    steps = {
+        "actions": reshape_float("steps/action", 7),
+        "joint_states": reshape_float("steps/observation/joint_state", 7),
+        "states": reshape_float("steps/observation/state", 8),
+        "images": list(f["steps/observation/image"].bytes_list.value),
+        "wrist_images": list(f["steps/observation/wrist_image"].bytes_list.value),
+    }
+    return meta, steps
+
+def _norm_text(s: str) -> str:
+    # normalize for matching
+    return re.sub(r"\s+", " ", s.strip().lower())
+
+def load_libero_episode_by_instruction(target_instr: str, tfrecord_path = "/bigscratch/apilaka/rlds_datasets/open_x_embodiment/libero_object_no_noops/1.0.0/*.tfrecord-*"):
+    """
+    Scan TFRecords and return the FIRST episode whose language_instruction matches target_instruction
+    (case/whitespace-insensitive). If instruction is absent, attempt fallback match via file_path.
+    """
+    target_norm = _norm_text(target_instr)
+    files = tf.io.gfile.glob(tfrecord_path)
+    assert files, f"No TFRecords found for pattern: {tfrecord_path}"
+    ds = tf.data.TFRecordDataset(files)
+
+    fallback_hits = []  # collect plausible fallbacks (by filename)
+    for rec in ds:
+        meta, steps = _parse_example_flat(rec)
+        instr_norm = _norm_text(meta["instruction"]) if meta["instruction"] else ""
+        if instr_norm and instr_norm == target_norm:
+            # exact text match
+            return {**meta, **steps}
+
+        # fallback heuristic: sometimes file_path contains the task string
+        if not instr_norm and meta["file_path"]:
+            if _norm_text(meta["file_path"]).find(target_norm) != -1:
+                fallback_hits.append(({**meta, **steps}))
+
+    if fallback_hits:
+        return fallback_hits[0]  # best-effort
+
+    raise ValueError(
+        f"No episode found matching instruction:\n"
+        f"  '{target_instr}'\n"
+        f"Scanned: {len(files)} files. Consider loosening the match or verifying the conversion."
+    )
+# ============================================================================================
+
+
 @draccus.wrap()
 def eval_libero(cfg: GenerateConfig) -> None:
     assert cfg.pretrained_checkpoint is not None, "cfg.pretrained_checkpoint must not be None!"
@@ -143,16 +225,17 @@ def eval_libero(cfg: GenerateConfig) -> None:
     # [OpenVLA] Set action un-normalization key
     cfg.unnorm_key = cfg.task_suite_name
 
-    # Load model
-    model = get_model(cfg)
+    if not cfg.sanity_check:
+        # Load model
+        model = get_model(cfg)
 
-    # [OpenVLA] Check that the model contains the action un-normalization key
-    if cfg.model_family == "openvla":
-        # In some cases, the key must be manually modified (e.g. after training on a modified version of the dataset
-        # with the suffix "_no_noops" in the dataset name)
-        if cfg.unnorm_key not in model.norm_stats and f"{cfg.unnorm_key}_no_noops" in model.norm_stats:
-            cfg.unnorm_key = f"{cfg.unnorm_key}_no_noops"
-        assert cfg.unnorm_key in model.norm_stats, f"Action un-norm key {cfg.unnorm_key} not found in VLA `norm_stats`!"
+        # [OpenVLA] Check that the model contains the action un-normalization key
+        if cfg.model_family == "openvla":
+            # In some cases, the key must be manually modified (e.g. after training on a modified version of the dataset
+            # with the suffix "_no_noops" in the dataset name)
+            if cfg.unnorm_key not in model.norm_stats and f"{cfg.unnorm_key}_no_noops" in model.norm_stats:
+                cfg.unnorm_key = f"{cfg.unnorm_key}_no_noops"
+            assert cfg.unnorm_key in model.norm_stats, f"Action un-norm key {cfg.unnorm_key} not found in VLA `norm_stats`!"
 
     # [OpenVLA] Get Hugging Face processor
     processor = None
@@ -216,6 +299,11 @@ def eval_libero(cfg: GenerateConfig) -> None:
             # Set initial states
             obs = env.set_init_state(initial_states[episode_idx])
 
+            if cfg.sanity_check:
+                episode = load_libero_episode_by_instruction(task_description)
+                print(f"[REPLAY] Using demo with {episode['num_steps']} steps for instruction: {episode['instruction']}")
+
+
             # Setup
             t = 0
             replay_images = []
@@ -260,22 +348,25 @@ def eval_libero(cfg: GenerateConfig) -> None:
                             (obs["robot0_eef_pos"], quat2axisangle(obs["robot0_eef_quat"]), obs["robot0_gripper_qpos"])
                         ),
                     }
+                    if cfg.sanity_check:
+                        action = episode["actions"][t - cfg.num_steps_wait].astype(np.float32)  # Get action from demo
+                    else:
+                        # Query model to get action
+                        action = get_action(
+                            cfg,
+                            model,
+                            observation,
+                            task_description,
+                            processor=processor,
+                        )
 
-                    # Query model to get action
-                    action = get_action(
-                        cfg,
-                        model,
-                        observation,
-                        task_description,
-                        processor=processor,
-                    )
 
                     # Normalize gripper action [0,1] -> [-1,+1] because the environment expects the latter
                     action = normalize_gripper_action(action, binarize=True)
 
                     # [OpenVLA] The dataloader flips the sign of the gripper action to align with other datasets
                     # (0 = close, 1 = open), so flip it back (-1 = open, +1 = close) before executing the action
-                    if cfg.model_family == "openvla":
+                    if not cfg.sanity_check and cfg.model_family == "openvla":
                         action = invert_gripper_action(action)
 
                     # Execute action in environment

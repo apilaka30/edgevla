@@ -40,8 +40,13 @@ def get_vla(cfg):
     AutoProcessor.register(OpenVLAConfig, PrismaticProcessor)
     AutoModelForVision2Seq.register(OpenVLAConfig, OpenVLAForActionPrediction)
 
+    config: OpenVLAConfig = AutoConfig.from_pretrained(cfg.pretrained_checkpoint, trust_remote_code=True)
+    config.text_config.vocab_size = 32064  # Set the text vocabulary size to match the tokenizer's vocab size.
+
+
     vla = AutoModelForVision2Seq.from_pretrained(
         cfg.pretrained_checkpoint,
+        config=config,
         attn_implementation="flash_attention_2",
         torch_dtype=torch.bfloat16,
         load_in_8bit=cfg.load_in_8bit,
