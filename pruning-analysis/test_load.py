@@ -34,6 +34,14 @@ from prismatic.util.batching_utils import SplitModalitySampler
 from prismatic.util.data_utils import PaddedCollatorForActionPrediction, PaddedCollatorForLanguageModeling
 from prismatic.vla.action_tokenizer import ActionTokenizer
 
+
+from prismatic.extern.hf.configuration_prismatic import OpenVLAConfig
+from prismatic.extern.hf.modeling_prismatic import OpenVLAForActionPrediction
+from prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, PrismaticProcessor
+
+from transformers import AutoModelForVision2Seq, AutoProcessor, BitsAndBytesConfig
+from transformers import AutoConfig, AutoImageProcessor
+
 # Disable Tokenizers Parallelism to Play Nice w/ PyTorch Multiprocessing DataLoaders
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -87,33 +95,53 @@ class TrainConfig:
 def load_and_test(cfg: TrainConfig) -> None:
     hf_token = cfg.hf_token.read_text().strip() if isinstance(cfg.hf_token, Path) else os.environ[cfg.hf_token]
 
-    vlm = load_vla(Path("/home/apilaka/edgevla/checkpoints/vla/llava-lrv-openx/checkpoints/step-3000-epoch-00-loss=3.0724.pt"), hf_token=hf_token, load_for_training=True)
+    # vlm = load_vla(Path("/home/apilaka/edgevla/checkpoints/vla/llava-lrv-openx/checkpoints/step-3000-epoch-00-loss=3.0724.pt"), hf_token=hf_token, load_for_training=True)
 
-    # # [Explicit] Call to `freeze_backbones` here for clarity => will log exactly what is frozen / what's not!
-    # overwatch.info(f"Invoking `VLM.freeze_backbones()` for `{model_id}` => Training Stage: `{cfg.stage}`")
-    vlm.freeze_backbones("vla-train")
+    # # # [Explicit] Call to `freeze_backbones` here for clarity => will log exactly what is frozen / what's not!
+    # # overwatch.info(f"Invoking `VLM.freeze_backbones()` for `{model_id}` => Training Stage: `{cfg.stage}`")
+    # vlm.freeze_backbones("vla-train")
+
+     # Register OpenVLA model to HF Auto Classes (not needed if the model is on HF Hub)
+    AutoConfig.register("openvla", OpenVLAConfig)
+    AutoImageProcessor.register(OpenVLAConfig, PrismaticImageProcessor)
+    AutoProcessor.register(OpenVLAConfig, PrismaticProcessor)
+    AutoModelForVision2Seq.register(OpenVLAConfig, OpenVLAForActionPrediction)
+
+    vla_path = "/home/apilaka/edgevla/checkpoints/vla/llava-lvis-lrv-openx/hf_checkpoints"
+
+    config: OpenVLAConfig = AutoConfig.from_pretrained(vla_path, trust_remote_code=True)
+    config.text_config.vocab_size = 32064  # Set the text vocabulary size to match the tokenizer's vocab size.
+
+    vlm = AutoModelForVision2Seq.from_pretrained(
+        vla_path,
+        config=config,
+        torch_dtype=torch.bfloat16,
+        low_cpu_mem_usage=True,
+        trust_remote_code=True,
+    )
 
     # Load Weights from Checkpoint (depends on stage, config)
-    overwatch.info(f"Loading LoRA Adapter Weights from /bigscratch/apilaka/vla/runs/edgevla+n1+b108+x7/lora-step-006000-epoch-00-loss=2.9216")
+    overwatch.info(f"Loading LoRA Adapter Weights from /home/apilaka/edgevla/openvla/adapter-tmp/edgevla+libero_spatial_no_noops+b32+lr-0.0005+lora-r32+dropout-0.0--image_aug")
     # vlm = PrismaticVLM.from_pretrained(cfg.pretrained_checkpoint, cfg.model.model_id, vision_backbone=vision_backbone, llm_backbone=llm_backbone, arch_specifier=cfg.model.arch_specifier)
-    vlm = PeftModel.from_pretrained(vlm,  Path("/bigscratch/apilaka/vla/runs/edgevla+n1+b108+x7/lora-step-006000-epoch-00-loss=2.9216"))
+    vlm = PeftModel.from_pretrained(vlm,  Path("/home/apilaka/edgevla/openvla/adapter-tmp/edgevla+libero_spatial_no_noops+b32+lr-0.0005+lora-r32+dropout-0.0--image_aug"))
     vlm = vlm.merge_and_unload()
     
-    full_vlm_state_dict = vlm.state_dict()
-    model_state_dicts = {
-        mkey: OrderedDict() for mkey in vlm.all_module_keys
-    }
+#     full_vlm_state_dict = vlm.state_dict()
+#     model_state_dicts = {
+#         mkey: OrderedDict() for mkey in vlm.all_module_keys
+#     }
 
-#     # Iterate through `full_vlm_state_dict` and split `mkey.{full_dotted_path}` -> `mkey: {full_dotted_path}`
-    for key, param in full_vlm_state_dict.items():
-        for mkey in model_state_dicts:
-            if key.startswith(mprefix := f"{mkey}."):
-                model_state_dicts[mkey][key.removeprefix(mprefix)] = param
+# #     # Iterate through `full_vlm_state_dict` and split `mkey.{full_dotted_path}` -> `mkey: {full_dotted_path}`
+#     for key, param in full_vlm_state_dict.items():
+#         for mkey in model_state_dicts:
+#             if key.startswith(mprefix := f"{mkey}."):
+#                 model_state_dicts[mkey][key.removeprefix(mprefix)] = param
 
-    checkpoint_path = "/home/apilaka/edgevla/checkpoints/vla/llava-lrv-openx/checkpoints/step-6000-epoch-00-loss=2.9216.pt"
+    # checkpoint_path = "/home/apilaka/edgevla/checkpoints/vla/llava-lrv-openx/checkpoints/step-6000-epoch-00-loss=2.9216.pt"
     overwatch.info(f"Saving Converted VLA Checkpoint to /home/apilaka/edgevla/checkpoints/vla/llava-lrv-openx/checkpoints/step-6000-epoch-00-loss=2.9216.pt")
-    # Save Checkpoint & Copy Latest to `latest-checkpoint.pt`
-    torch.save({"model": model_state_dicts}, checkpoint_path)
+    vlm.save_pretrained("/home/apilaka/edgevla/checkpoints/vla/llava-lvis-lrv-openx/hf_checkpoints")
+    # # Save Checkpoint & Copy Latest to `latest-checkpoint.pt`
+    # torch.save({"model": model_state_dicts}, checkpoint_path)
 
 
     # # SAVE THIS VLM CHECKPOINT

@@ -18,7 +18,7 @@ from prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, Pr
 ACTION_DIM = 7
 DATE = time.strftime("%Y_%m_%d")
 DATE_TIME = time.strftime("%Y_%m_%d-%H_%M_%S")
-DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+DEVICE = torch.device("cuda:1") if torch.cuda.is_available() else torch.device("cpu")
 np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
 
 # Initialize system prompt for OpenVLA v0.1.
@@ -42,7 +42,8 @@ def get_vla(cfg):
 
     config: OpenVLAConfig = AutoConfig.from_pretrained(cfg.pretrained_checkpoint, trust_remote_code=True)
     config.text_config.vocab_size = 32064  # Set the text vocabulary size to match the tokenizer's vocab size.
-
+    config.num_hidden_layers = 22-1
+    config.text_config.num_hidden_layers = 22-1
 
     vla = AutoModelForVision2Seq.from_pretrained(
         cfg.pretrained_checkpoint,

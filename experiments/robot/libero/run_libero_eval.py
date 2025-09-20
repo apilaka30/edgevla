@@ -59,18 +59,18 @@ class GenerateConfig:
     # Model-specific parameters
     #################################################################################################################
     model_family: str = "openvla"                    # Model family
-    pretrained_checkpoint: Union[str, Path] = "/home/apilaka/edgevla/checkpoints/vla/llava-lvis-lrv-openx/hf_checkpoints"     # Pretrained checkpoint path
+    pretrained_checkpoint: Union[str, Path] = "/home/apilaka/pruned_models/one_block-ft/edgevla+libero_spatial_no_noops+b32+lr-0.0005+lora-r32+dropout-0.0--image_aug"#/home/apilaka/vla-ft-lambda/runs/edgevla+libero_spatial_no_noops+b64+lr-0.0005+lora-r32+dropout-0.0--image_aug"#"/home/apilaka/vla-ft/runs/edgevla+libero_spatial_no_noops+b32+lr-0.0005+lora-r32+dropout-0.0--image_aug"     # Pretrained checkpoint path
     load_in_8bit: bool = False                       # (For OpenVLA only) Load with 8-bit quantization
     load_in_4bit: bool = False                       # (For OpenVLA only) Load with 4-bit quantization
 
-    center_crop: bool = False                         # Center crop? (if trained w/ random crop image aug)
+    center_crop: bool = True                         # Center crop? (if trained w/ random crop image aug)
 
     #################################################################################################################
     # LIBERO environment-specific parameters
     #################################################################################################################
-    task_suite_name: str = "libero_object"          # Task suite. Options: libero_spatial, libero_object, libero_goal, libero_10, libero_90
+    task_suite_name: str = "libero_spatial"          # Task suite. Options: libero_spatial, libero_object, libero_goal, libero_10, libero_90
     num_steps_wait: int = 10                         # Number of steps to wait for objects to stabilize in sim
-    num_trials_per_task: int = 1                    # Number of rollouts per task
+    num_trials_per_task: int = 50                    # Number of rollouts per task
 
     #################################################################################################################
     # Utils
@@ -85,7 +85,7 @@ class GenerateConfig:
     seed: int = 7                                    # Random Seed (for reproducibility)
     aug_period: int = 1
     use_augmentation: bool = False
-    sanity_check: bool = True
+    sanity_check: bool = False
 
     # fmt: on
 
@@ -308,7 +308,7 @@ def eval_libero(cfg: GenerateConfig) -> None:
             t = 0
             replay_images = []
             if cfg.task_suite_name == "libero_spatial":
-                max_steps = 220  # longest training demo has 193 steps
+                max_steps = 400  # longest training demo has 193 steps
             elif cfg.task_suite_name == "libero_object":
                 max_steps = 280  # longest training demo has 254 steps
             elif cfg.task_suite_name == "libero_goal":

@@ -293,7 +293,7 @@ class Ext_Exp_1B_Llama2_Chat(Exp_7B_One_Stage):
     # finetune_max_steps: Optional[int] = 10 # Just to test checkpointing
 
     finetune_per_device_batch_size: int = 20 #21
-    finetune_global_batch_size: int = finetune_per_device_batch_size * 16 # 4 GPUs and 4 gradient_accumulation_steps
+    finetune_global_batch_size: int = finetune_per_device_batch_size * 4 # 4 GPUs and 4 gradient_accumulation_steps
 
 
 @dataclass

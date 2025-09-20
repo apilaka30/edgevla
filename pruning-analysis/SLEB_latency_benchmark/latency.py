@@ -14,7 +14,7 @@ from PIL import Image
 
 def run(
     model: any = None,
-    removal_ratio: float = 0.2,
+    num_layers: int = 4,
     generation: bool = True,
     result_folder: str ='sleb_results',
     result_file: str = 'latency.txt',
@@ -26,7 +26,7 @@ def run(
     gpu_num = torch.cuda.device_count()
     gpu_name = torch.cuda.get_device_name(torch.cuda.current_device())
     num_of_blocks = model.llm_backbone.llm.config.num_hidden_layers
-    num_removal = int(np.ceil(num_of_blocks * removal_ratio))
+    num_removal = num_layers
     removal_list = [i+1 for i in range(num_removal)]
     
     print("==================================================")
@@ -50,7 +50,7 @@ def run(
 
     
     sleb_latency = latency_utils.test_latency(model, generation, sample_img, sample_prompt)
-    print(f"SLEB {removal_ratio} Latency (avg over {num_trials} trials): {sleb_latency:.2f}ms")
+    print(f"SLEB {num_removal/num_of_blocks} Latency (avg over {num_trials} trials): {sleb_latency:.2f}ms")
 
     # is the first 0.0% pruning run
     if dense_latency is None:
@@ -77,7 +77,7 @@ def run(
         file.write(", ")
         file.write(f"Dense Latency: {dense_latency:.2f}ms")
         file.write(", ")
-        file.write(f"SLEB {removal_ratio} Latency: {sleb_latency:.2f}ms")
+        file.write(f"SLEB {num_removal/num_of_blocks} Latency: {sleb_latency:.2f}ms")
         file.write(", ")
         file.write(f"Speedup: x{speedup:.2f}")
         file.write("\n")
@@ -96,30 +96,32 @@ if __name__ == '__main__':
     instruction = "What should the robot do to Open cabinet door?"
 
     dlat = None
+    max_ratio = 0.2
 
-    step = 0.05
-    max_ratio = 0.3
+    step = 1
+    max_layers = 5#round(max_ratio * vlm.llm_backbone.llm.config.num_hidden_layers)
     # Run the experiment for different removal ratios
     # from 0 to max_ratio with the specified step size
-    prune_ratios = np.arange(0, max_ratio + step, step)
+    prune_layers = np.arange(0, max_layers + step, step)
 
     # Initialize arrays to store results
-    dense_latencies = np.zeros_like(prune_ratios)
-    sleb_latencies = np.zeros_like(prune_ratios)
-    speedups = np.zeros_like(prune_ratios)
+    dense_latencies = np.zeros_like(prune_layers, dtype=np.float32)
+    sleb_latencies = np.zeros_like(prune_layers, dtype=np.float32)
+    speedups = np.zeros_like(prune_layers, dtype=np.float32)
     
-    for i, ratio in enumerate(prune_ratios):
+    for i, num_layers in enumerate(prune_layers):
         (dense_latency, sleb_latency, speedup) = run(
             model=vlm,
-            removal_ratio=ratio,
+            num_layers=num_layers,
             generation=True,
-            result_folder='/home/apilaka/edgevla/openvla/pruning-analysis/sleb_results_V100_vlm',
+            result_folder='/home/apilaka/edgevla/openvla/pruning-analysis/sleb_results_a100',
             result_file='vlm_latency.txt',
             num_trials=10,
             dense_latency=dlat,
             sample_img=img,
             sample_prompt=instruction,
         )
+        
         dense_latencies[i] = dense_latency
         sleb_latencies[i] = sleb_latency
         speedups[i] = speedup
@@ -128,20 +130,19 @@ if __name__ == '__main__':
 
 
     plt.figure(figsize=(6,4))
-    plt.plot(prune_ratios, speedups, marker="o")
-    plt.xlabel("% Blocks Pruned")
+    plt.plot(prune_layers, speedups, marker="o")
+    plt.xlabel("# Blocks Pruned")
     plt.ylabel("Avg Inference Speedup (X)")
     plt.title("EdgeVLA SLEB Depth-Pruning Ratio vs Inference Speedup")
     plt.grid(alpha=0.3)
     plt.tight_layout()
-    plt.savefig("/home/apilaka/edgevla/openvla/pruning-analysis/sleb_results_V100_vlm/sleb_block_prune_speedup.png")
-
+    plt.savefig("/home/apilaka/edgevla/openvla/pruning-analysis/sleb_results_a100/sleb_block_prune_speedup.png")
 
     plt.figure(figsize=(6,4))
-    plt.plot(prune_ratios, sleb_latencies, marker="o")
-    plt.xlabel("% Blocks Pruned")
+    plt.plot(prune_layers, sleb_latencies, marker="o")
+    plt.xlabel("# Blocks Pruned")
     plt.ylabel("Avg Inference Latency (ms)")
     plt.title("EdgeVLA SLEB Depth-Pruning Ratio vs. Generation Latency")
     plt.grid(alpha=0.3)
     plt.tight_layout()
-    plt.savefig("/home/apilaka/edgevla/openvla/pruning-analysis/sleb_results_V100_vlm/sleb_block_prune_latencies.png")
+    plt.savefig("/home/apilaka/edgevla/openvla/pruning-analysis/sleb_results_a100/sleb_block_prune_latencies.png")

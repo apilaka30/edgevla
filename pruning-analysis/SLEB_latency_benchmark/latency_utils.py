@@ -8,7 +8,7 @@ def test_latency(model, generation, image: Image, prompt: str):
 
     if (generation) :
         # setting for token generation
-        generation_length = 128
+        generation_length = 7
         prompt_length = 64
         batch_size = 64
         max_length = prompt_length + generation_length

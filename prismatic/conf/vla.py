@@ -92,26 +92,25 @@ class Exp_SigLIP_224px_Bridge(VLAConfig):
 
 @dataclass
 class Exp_Tinyllama_DinoSigLIP_224px_TinyLlamaMix(Exp_SigLIP_224px_Bridge):
-    LIBERO_FT = True
 
     vla_id: str = "edgevla"
     base_vlm: Union[str, Path] = Path("/home/apilaka/edgevla/checkpoints/vlm/llava-lvis-lrv")
-    data_mix: str = "libero_spatial_no_noops" if LIBERO_FT else "oxe_magic_soup"     
-    shuffle_buffer_size: int = 100_000
+    data_mix: str = "oxe_magic_soup"     
+    shuffle_buffer_size: int = 150_000
 
     lora_rank = 32
     lora_alpha = min(lora_rank, 16)
 
-    learning_rate: float = 5e-4 if LIBERO_FT else 2e-5
+    learning_rate: float = 1e-5
     lr_scheduler_type: str = "constant"
     warmup_ratio: float = 0.03
     weight_decay: float = 1e-2
 
     # 4 GPUs, 8 per GPU, 1 gradient accumulation step
     expected_world_size: int = 4
-    per_device_batch_size: int = 32
-    global_batch_size: int = per_device_batch_size*expected_world_size*1 if LIBERO_FT else per_device_batch_size*expected_world_size*14
-    max_steps: Optional[int] = 50_000 if LIBERO_FT else None
+    per_device_batch_size: int = 35
+    global_batch_size: int = per_device_batch_size*expected_world_size*10
+    max_steps: Optional[int] = None
 
     freeze_vision_backbone: bool = False
     enable_mixed_precision_training: bool = True

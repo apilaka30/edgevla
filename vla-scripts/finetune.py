@@ -1,5 +1,5 @@
 """
-finetune.py
+finetune.py4.12.0.88
 
 Simple script for parameter-efficient fine-tuning of OpenVLA models loaded through the HuggingFace AutoClasses, using
 HuggingFace PEFT library for low-rank adaptation (LoRA).
@@ -75,18 +75,18 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 @dataclass
 class FinetuneConfig:
     # fmt: off
-    vla_path: str = "/home/apilaka/edgevla/checkpoints/vla/llava-lvis-lrv-openx/hf_checkpoints"     # Path to OpenVLA model (on HuggingFace Hub)
+    vla_path: str = "/home/apilaka/pruned_models/one_block-ft/edgevla0+libero_spatial_no_noops+b32+lr-0.0005+lora-r32+dropout-0.0--image_aug"#"/home/apilaka/vla-ft-lambda/runs/edgevla+libero_spatial_no_noops+b64+lr-0.0005+lora-r32+dropout-0.0--image_aug"     # Path to OpenVLA model (on HuggingFace Hub)
 
     # Directory Paths
     data_root_dir: Path = Path("/home/apilaka/tensorflow_datasets")        # Path to Open-X dataset directory
     dataset_name: str = "libero_spatial_no_noops"                                # Name of fine-tuning dataset (e.g., `droid_wipe`)
-    run_root_dir: Path = Path("/home/apilaka/vla-ft/runs")                               # Path to directory to store logs & checkpoints
+    run_root_dir: Path = Path("/home/apilaka/pruned_models/one_block-ft")                               # Path to directory to store logs & checkpoints
     adapter_tmp_dir: Path = Path("adapter-tmp")                     # Temporary directory for LoRA weights before fusing
 
     # Fine-tuning Parameters
     batch_size: int = 16                                           # Fine-tuning batch size
-    max_steps: int = 50_000                                        # Max number of fine-tuning steps
-    save_steps: int = 5000                                          # Interval for checkpoint saving
+    max_steps: int = 4_000                                        # Max number of fine-tuning steps
+    save_steps: int = 1000                                          # Interval for checkpoint saving
     learning_rate: float = 5e-4                                     # Fine-tuning learning rate
     grad_accumulation_steps: int = 2                                # Gradient accumulation steps
     image_aug: bool = True                                          # Whether to train with image augmentations
@@ -155,6 +155,8 @@ def finetune(cfg: FinetuneConfig) -> None:
 
     config: OpenVLAConfig = AutoConfig.from_pretrained(cfg.vla_path, trust_remote_code=True)
     config.text_config.vocab_size = 32064  # Set the text vocabulary size to match the tokenizer's vocab size.
+    config.num_hidden_layers = 22-1
+    config.text_config.num_hidden_layers = 22-1
 
     # Load OpenVLA Processor and Model using HF AutoClasses
     processor = AutoProcessor.from_pretrained(cfg.vla_path, trust_remote_code=True)
@@ -259,7 +261,7 @@ def finetune(cfg: FinetuneConfig) -> None:
     smoothened_action_accuracy = 0.0
     smoothened_loss = 0.0
     # Train!
-    with tqdm.tqdm(total=cfg.max_steps, desc=f"Loss :: {smoothened_loss:.4f} - TA :: {smoothened_action_accuracy}",leave=False) as progress:
+    with tqdm.tqdm(total=cfg.max_steps, desc=f"Loss :: {smoothened_loss:.4f} - TA :: {smoothened_action_accuracy}",leave=False, disable=not distributed_state.is_main_process) as progress:
         vla.train()
         optimizer.zero_grad()
         for batch_idx, batch in enumerate(dataloader):
@@ -349,7 +351,7 @@ def finetune(cfg: FinetuneConfig) -> None:
                 #   =>> Note that merging is slow and can be done post-hoc to speed up training
                 if cfg.use_lora:
                     base_vla = AutoModelForVision2Seq.from_pretrained(
-                        cfg.vla_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, trust_remote_code=True
+                        cfg.vla_path, config=config, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, trust_remote_code=True
                     )
                     merged_vla = PeftModel.from_pretrained(base_vla, adapter_dir)
                     merged_vla = merged_vla.merge_and_unload()

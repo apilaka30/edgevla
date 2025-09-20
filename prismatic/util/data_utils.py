@@ -136,6 +136,7 @@ class PaddedCollatorForActionPrediction:
             input_ids=input_ids,
             attention_mask=attention_mask,
             labels=labels,
+            language_instruction=instances[0]["language_instruction"]
         )
         if dataset_names is not None:
             output["dataset_names"] = dataset_names
